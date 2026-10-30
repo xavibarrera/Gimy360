@@ -532,6 +532,25 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
 
+  // Control de ejercicios expandidos/colapsados en el entreno activo (por defecto todos colapsados)
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Record<string, boolean>>({});
+
+  const toggleExerciseExpand = (exerciseWorkoutId: string) => {
+    setExpandedExerciseIds((prev) => ({
+      ...prev,
+      [exerciseWorkoutId]: !prev[exerciseWorkoutId],
+    }));
+  };
+
+  const handleToggleExpandAll = (expand: boolean) => {
+    if (!activeWorkout) return;
+    const newState: Record<string, boolean> = {};
+    activeWorkout.exercises.forEach((ex) => {
+      newState[ex.id] = expand;
+    });
+    setExpandedExerciseIds(newState);
+  };
+
   // Referencia para timer de descanso
   const restIntervalRef = useRef<number | null>(null);
 
@@ -752,6 +771,11 @@ export default function App() {
       ...activeWorkout,
       exercises: [...activeWorkout.exercises, newExercise],
     });
+    // Al añadir un ejercicio manualmente se abre automáticamente para editarlo
+    setExpandedExerciseIds((prev) => ({
+      ...prev,
+      [newExercise.id]: true,
+    }));
     setShowAddExerciseModal(false);
   };
 
@@ -1325,31 +1349,73 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Lista de Ejercicios del Entreno Activo */}
-                <div className="space-y-4">
+                {/* Barra de control de ejercicios: Contador y Expandir/Colapsar todos */}
+                <div className="flex items-center justify-between px-1 text-xs">
+                  <span className="font-bold text-slate-400">
+                    {activeWorkout.exercises.length} {activeWorkout.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleExpandAll(true)}
+                      className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
+                    >
+                      Expandir todos
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      onClick={() => handleToggleExpandAll(false)}
+                      className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
+                    >
+                      Colapsar todos
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de Ejercicios del Entreno Activo (Acordeón Colapsable) */}
+                <div className="space-y-3">
                   {activeWorkout.exercises.map((workoutEx, exIdx) => {
                     const exerciseInfo = exercises.find((e) => e.id === workoutEx.exerciseId);
                     const previousSets = getPreviousExerciseSets(workoutEx.exerciseId);
+                    const isExpanded = !!expandedExerciseIds[workoutEx.id];
+                    const completedSetsCount = workoutEx.sets.filter((s) => s.completed).length;
+                    const totalSetsCount = workoutEx.sets.length;
+                    const isAllCompleted = totalSetsCount > 0 && completedSetsCount === totalSetsCount;
+                    const lastCompletedSet = [...workoutEx.sets].reverse().find((s) => s.completed);
 
                     return (
                       <div
                         key={workoutEx.id}
-                        className="bg-slate-900 border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 shadow-md transition-all"
+                        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-200 shadow-md ${
+                          isAllCompleted
+                            ? 'border-emerald-500/40 bg-slate-900/90'
+                            : isExpanded
+                            ? 'border-slate-700 bg-slate-900 ring-1 ring-emerald-500/20'
+                            : 'border-slate-800/90 hover:border-slate-700'
+                        }`}
                       >
-                        {/* Cabecera del Ejercicio */}
-                        <div className="flex items-start justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 font-black text-xs flex items-center justify-center border border-emerald-500/20">
-                              {exIdx + 1}
+                        {/* Cabecera Táctil del Ejercicio (Click para Expandir / Colapsar) */}
+                        <div
+                          onClick={() => toggleExerciseExpand(workoutEx.id)}
+                          className="flex items-center justify-between gap-2 p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
+                                isAllCompleted
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              }`}
+                            >
+                              {isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : exIdx + 1}
                             </span>
-                            <div>
-                              <h3 className="text-sm sm:text-base font-extrabold text-white">
+                            <div className="min-w-0">
+                              <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
                                 {exerciseInfo?.name || 'Ejercicio'}
                               </h3>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-1.5 mt-0.5">
                                 {exerciseInfo && (
                                   <span
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
                                       getEquipmentBadge(exerciseInfo.equipment).color
                                     }`}
                                   >
@@ -1363,149 +1429,212 @@ export default function App() {
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => handleRemoveExerciseFromWorkout(exIdx)}
-                            className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition"
-                            title="Eliminar este ejercicio"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Badge de Progreso de Series */}
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
+                                isAllCompleted
+                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
+                                  : completedSetsCount > 0
+                                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700/80'
+                              }`}
+                            >
+                              {isAllCompleted ? (
+                                <>
+                                  <Check className="w-3 h-3 stroke-[3]" /> Completo
+                                </>
+                              ) : (
+                                `${completedSetsCount}/${totalSetsCount} series`
+                              )}
+                            </span>
 
-                        {/* Cabecera de Columnas de Series */}
-                        <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-1 text-center">
-                          <span className="col-span-2 text-left">Serie</span>
-                          <span className="col-span-3">Anterior</span>
-                          <span className="col-span-3">{settings.unit.toUpperCase()}</span>
-                          <span className="col-span-2">Reps</span>
-                          <span className="col-span-2">Listo</span>
-                        </div>
+                            {/* Botón Eliminar Ejercicio */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveExerciseFromWorkout(exIdx);
+                              }}
+                              className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition"
+                              title="Eliminar este ejercicio"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
 
-                        {/* Filas de Series */}
-                        <div className="space-y-1.5">
-                          {workoutEx.sets.map((set, setIdx) => {
-                            const prevSet = previousSets[setIdx] || previousSets[previousSets.length - 1];
-                            const ghostText = prevSet ? `${prevSet.weight}kg × ${prevSet.reps}` : '—';
-                            const est1RM = calculate1RM(set.weight, set.reps);
-
-                            return (
-                              <div
-                                key={set.id}
-                                className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-1.5 rounded-xl transition-all ${
-                                  set.completed
-                                    ? 'bg-emerald-950/20 border border-emerald-500/30'
-                                    : 'bg-slate-950/70 border border-slate-800/60'
+                            {/* Flecha Chevron Giratoria */}
+                            <div className="p-1 text-slate-400">
+                              <ChevronDown
+                                className={`w-4 h-4 transition-transform duration-200 ${
+                                  isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
                                 }`}
-                              >
-                                {/* Tipo / Número de Serie */}
-                                <div className="col-span-2 flex items-center gap-1">
-                                  <button
-                                    onClick={() => {
-                                      const types: SetType[] = ['N', 'W', 'F', 'D'];
-                                      const nextType = types[(types.indexOf(set.type) + 1) % types.length];
-                                      handleUpdateSet(exIdx, setIdx, 'type', nextType);
-                                    }}
-                                    className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition active:scale-90 ${
-                                      set.type === 'W'
-                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                                        : set.type === 'F'
-                                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                                        : set.type === 'D'
-                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
-                                        : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                    }`}
-                                    title={`Tipo: ${
-                                      set.type === 'W'
-                                        ? 'Calentamiento'
-                                        : set.type === 'F'
-                                        ? 'Fallo Muscular'
-                                        : set.type === 'D'
-                                        ? 'Drop Set'
-                                        : 'Normal'
-                                    } (Click para cambiar)`}
-                                  >
-                                    {set.type === 'N' ? setIdx + 1 : set.type}
-                                  </button>
-                                  {set.completed && est1RM > 0 && (
-                                    <span
-                                      className="hidden sm:inline text-[9px] font-bold text-slate-500"
-                                      title="1RM Estimada (Epley)"
-                                    >
-                                      {est1RM}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Placeholder / Ghost Data previo */}
-                                <div className="col-span-3 text-center text-xs font-mono-numbers text-slate-500 truncate select-text">
-                                  {ghostText}
-                                </div>
-
-                                {/* Input Peso (kg) con botones de ajuste rápido */}
-                                <div className="col-span-3 flex items-center justify-center">
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    min="0"
-                                    value={set.weight === 0 ? '' : set.weight}
-                                    placeholder="0"
-                                    onChange={(e) =>
-                                      handleUpdateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)
-                                    }
-                                    className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
-                                  />
-                                </div>
-
-                                {/* Input Repeticiones */}
-                                <div className="col-span-2 flex items-center justify-center">
-                                  <input
-                                    type="number"
-                                    step="1"
-                                    min="0"
-                                    value={set.reps === 0 ? '' : set.reps}
-                                    placeholder="0"
-                                    onChange={(e) =>
-                                      handleUpdateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0)
-                                    }
-                                    className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
-                                  />
-                                </div>
-
-                                {/* Casilla de Verificación Táctil Grande */}
-                                <div className="col-span-2 flex items-center justify-center gap-1">
-                                  <button
-                                    onClick={() => handleUpdateSet(exIdx, setIdx, 'completed', !set.completed)}
-                                    className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
-                                      set.completed
-                                        ? 'bg-emerald-500 text-slate-950 shadow-emerald-500/30 font-black'
-                                        : 'bg-slate-800 text-slate-500 hover:text-slate-300 border border-slate-700'
-                                    }`}
-                                  >
-                                    <Check className={`w-4 h-4 ${set.completed ? 'stroke-[3]' : ''}`} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleRemoveSet(exIdx, setIdx)}
-                                    className="text-slate-600 hover:text-rose-400 p-1 rounded transition text-xs"
-                                    title="Quitar serie"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Botón "+ Añadir Serie" */}
-                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                          <button
-                            onClick={() => handleAddSet(exIdx)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
+                        {/* Vista Resumida cuando está colapsado */}
+                        {!isExpanded && lastCompletedSet && (
+                          <div
+                            onClick={() => toggleExerciseExpand(workoutEx.id)}
+                            className="px-3.5 pb-2.5 pt-0 text-[11px] text-slate-400 flex items-center justify-between cursor-pointer border-t border-slate-800/40 bg-slate-950/30"
                           >
-                            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Añadir Serie</span>
-                          </button>
-                        </div>
+                            <span className="truncate">
+                              Última serie:{' '}
+                              <strong className="text-slate-200 font-mono-numbers">
+                                {lastCompletedSet.weight} {settings.unit} × {lastCompletedSet.reps} reps
+                              </strong>
+                            </span>
+                            <span className="text-[10px] text-emerald-400 font-semibold hover:underline">
+                              Toca para abrir
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Contenido Expandido: Cabecera de Series, Filas y Botón Añadir */}
+                        {isExpanded && (
+                          <div className="p-3.5 sm:p-4 pt-1 border-t border-slate-800/80 space-y-2 animate-in fade-in duration-150">
+                            {/* Cabecera de Columnas de Series */}
+                            <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-1 text-center">
+                              <span className="col-span-2 text-left">Serie</span>
+                              <span className="col-span-3">Anterior</span>
+                              <span className="col-span-3">{settings.unit.toUpperCase()}</span>
+                              <span className="col-span-2">Reps</span>
+                              <span className="col-span-2">Listo</span>
+                            </div>
+
+                            {/* Filas de Series */}
+                            <div className="space-y-1.5">
+                              {workoutEx.sets.map((set, setIdx) => {
+                                const prevSet = previousSets[setIdx] || previousSets[previousSets.length - 1];
+                                const ghostText = prevSet ? `${prevSet.weight}kg × ${prevSet.reps}` : '—';
+                                const est1RM = calculate1RM(set.weight, set.reps);
+
+                                return (
+                                  <div
+                                    key={set.id}
+                                    className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-1.5 rounded-xl transition-all ${
+                                      set.completed
+                                        ? 'bg-emerald-950/20 border border-emerald-500/30'
+                                        : 'bg-slate-950/70 border border-slate-800/60'
+                                    }`}
+                                  >
+                                    {/* Tipo / Número de Serie */}
+                                    <div className="col-span-2 flex items-center gap-1">
+                                      <button
+                                        onClick={() => {
+                                          const types: SetType[] = ['N', 'W', 'F', 'D'];
+                                          const nextType = types[(types.indexOf(set.type) + 1) % types.length];
+                                          handleUpdateSet(exIdx, setIdx, 'type', nextType);
+                                        }}
+                                        className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition active:scale-90 ${
+                                          set.type === 'W'
+                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                            : set.type === 'F'
+                                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                                            : set.type === 'D'
+                                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
+                                            : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                        }`}
+                                        title={`Tipo: ${
+                                          set.type === 'W'
+                                            ? 'Calentamiento'
+                                            : set.type === 'F'
+                                            ? 'Fallo Muscular'
+                                            : set.type === 'D'
+                                            ? 'Drop Set'
+                                            : 'Normal'
+                                        } (Click para cambiar)`}
+                                      >
+                                        {set.type === 'N' ? setIdx + 1 : set.type}
+                                      </button>
+                                      {set.completed && est1RM > 0 && (
+                                        <span
+                                          className="hidden sm:inline text-[9px] font-bold text-slate-500"
+                                          title="1RM Estimada (Epley)"
+                                        >
+                                          {est1RM}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Placeholder / Ghost Data previo */}
+                                    <div className="col-span-3 text-center text-xs font-mono-numbers text-slate-500 truncate select-text">
+                                      {ghostText}
+                                    </div>
+
+                                    {/* Input Peso (kg) con botones de ajuste rápido */}
+                                    <div className="col-span-3 flex items-center justify-center">
+                                      <input
+                                        type="number"
+                                        step="0.5"
+                                        min="0"
+                                        value={set.weight === 0 ? '' : set.weight}
+                                        placeholder="0"
+                                        onChange={(e) =>
+                                          handleUpdateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)
+                                        }
+                                        className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
+                                      />
+                                    </div>
+
+                                    {/* Input Repeticiones */}
+                                    <div className="col-span-2 flex items-center justify-center">
+                                      <input
+                                        type="number"
+                                        step="1"
+                                        min="0"
+                                        value={set.reps === 0 ? '' : set.reps}
+                                        placeholder="0"
+                                        onChange={(e) =>
+                                          handleUpdateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0)
+                                        }
+                                        className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
+                                      />
+                                    </div>
+
+                                    {/* Casilla de Verificación Táctil Grande */}
+                                    <div className="col-span-2 flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => handleUpdateSet(exIdx, setIdx, 'completed', !set.completed)}
+                                        className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
+                                          set.completed
+                                            ? 'bg-emerald-500 text-slate-950 shadow-emerald-500/30 font-black'
+                                            : 'bg-slate-800 text-slate-500 hover:text-slate-300 border border-slate-700'
+                                        }`}
+                                      >
+                                        <Check className={`w-4 h-4 ${set.completed ? 'stroke-[3]' : ''}`} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleRemoveSet(exIdx, setIdx)}
+                                        className="text-slate-600 hover:text-rose-400 p-1 rounded transition text-xs"
+                                        title="Quitar serie"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Botón "+ Añadir Serie" */}
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                              <button
+                                onClick={() => handleAddSet(exIdx)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Añadir Serie</span>
+                              </button>
+                              <button
+                                onClick={() => toggleExerciseExpand(workoutEx.id)}
+                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
+                              >
+                                Plegar ejercicio ▲
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
