@@ -375,98 +375,17 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_ROUTINES;
   });
 
-  // Historial de Entrenamientos Completados
+  // Historial de Entrenamientos Completados (100% datos reales, sin mock data)
   const [history, setHistory] = useState<WorkoutSession[]>(() => {
     const saved = localStorage.getItem('gimy360_history');
-    if (saved) return JSON.parse(saved);
-
-    // Muestra inicial de sesiones para ver el calendario y las gráficas inmediatamente
-    const now = Date.now();
-    const oneDay = 86400000;
-    return [
-      {
-        id: 'hist-1',
-        title: 'Torso / Empuje (Push)',
-        startTime: now - oneDay * 5,
-        endTime: now - oneDay * 5 + 3720000,
-        durationSeconds: 3720,
-        exercises: [
-          {
-            id: 'we-1',
-            exerciseId: 'ex-1',
-            sets: [
-              { id: 's-1', type: 'W', weight: 40, reps: 15, completed: true },
-              { id: 's-2', type: 'N', weight: 70, reps: 10, completed: true },
-              { id: 's-3', type: 'N', weight: 75, reps: 8, completed: true },
-              { id: 's-4', type: 'F', weight: 80, reps: 6, completed: true },
-            ],
-          },
-          {
-            id: 'we-2',
-            exerciseId: 'ex-2',
-            sets: [
-              { id: 's-5', type: 'N', weight: 26, reps: 10, completed: true },
-              { id: 's-6', type: 'N', weight: 28, reps: 8, completed: true },
-              { id: 's-7', type: 'N', weight: 28, reps: 8, completed: true },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'hist-2',
-        title: 'Espalda & Jalón (Pull)',
-        startTime: now - oneDay * 3,
-        endTime: now - oneDay * 3 + 4100000,
-        durationSeconds: 4100,
-        exercises: [
-          {
-            id: 'we-3',
-            exerciseId: 'ex-8',
-            sets: [
-              { id: 's-8', type: 'N', weight: 60, reps: 10, completed: true },
-              { id: 's-9', type: 'N', weight: 70, reps: 8, completed: true },
-              { id: 's-10', type: 'F', weight: 75, reps: 7, completed: true },
-            ],
-          },
-          {
-            id: 'we-4',
-            exerciseId: 'ex-7',
-            sets: [
-              { id: 's-11', type: 'N', weight: 55, reps: 12, completed: true },
-              { id: 's-12', type: 'N', weight: 65, reps: 10, completed: true },
-              { id: 's-13', type: 'N', weight: 70, reps: 8, completed: true },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'hist-3',
-        title: 'Pierna & Fuerza (Legs)',
-        startTime: now - oneDay * 1,
-        endTime: now - oneDay * 1 + 4500000,
-        durationSeconds: 4500,
-        exercises: [
-          {
-            id: 'we-5',
-            exerciseId: 'ex-14',
-            sets: [
-              { id: 's-14', type: 'W', weight: 60, reps: 10, completed: true },
-              { id: 's-15', type: 'N', weight: 90, reps: 8, completed: true },
-              { id: 's-16', type: 'N', weight: 100, reps: 6, completed: true },
-              { id: 's-17', type: 'F', weight: 110, reps: 5, completed: true },
-            ],
-          },
-          {
-            id: 'we-6',
-            exerciseId: 'ex-15',
-            sets: [
-              { id: 's-18', type: 'N', weight: 160, reps: 10, completed: true },
-              { id: 's-19', type: 'N', weight: 180, reps: 10, completed: true },
-            ],
-          },
-        ],
-      },
-    ];
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      // Filtrar cualquier dato de prueba anterior que empiece por 'hist-'
+      return Array.isArray(parsed) ? parsed.filter((s) => !s.id.startsWith('hist-')) : [];
+    } catch {
+      return [];
+    }
   });
 
   // Ajustes de la App
@@ -704,9 +623,9 @@ export default function App() {
               completed: false,
             }))
           : [
-              { id: `set-${idx}-1-${Date.now()}`, type: 'N', weight: 20, reps: 10, completed: false },
-              { id: `set-${idx}-2-${Date.now()}`, type: 'N', weight: 20, reps: 10, completed: false },
-              { id: `set-${idx}-3-${Date.now()}`, type: 'N', weight: 20, reps: 10, completed: false },
+              { id: `set-${idx}-1-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
+              { id: `set-${idx}-2-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
+              { id: `set-${idx}-3-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
             ];
 
       return {
@@ -756,9 +675,9 @@ export default function App() {
             completed: false,
           }))
         : [
-            { id: `set-${Date.now()}-1`, type: 'N', weight: 20, reps: 10, completed: false },
-            { id: `set-${Date.now()}-2`, type: 'N', weight: 20, reps: 10, completed: false },
-            { id: `set-${Date.now()}-3`, type: 'N', weight: 20, reps: 10, completed: false },
+            { id: `set-${Date.now()}-1`, type: 'N', weight: 0, reps: 0, completed: false },
+            { id: `set-${Date.now()}-2`, type: 'N', weight: 0, reps: 0, completed: false },
+            { id: `set-${Date.now()}-3`, type: 'N', weight: 0, reps: 0, completed: false },
           ];
 
     const newExercise: WorkoutExercise = {
@@ -2378,8 +2297,21 @@ export default function App() {
                 </label>
               </div>
 
-              {/* Botón para reiniciar a datos de fábrica */}
-              <div className="pt-2 border-t border-slate-800/80">
+              {/* Opciones de limpieza de datos */}
+              <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                <button
+                  onClick={() => {
+                    if (window.confirm('¿Deseas vaciar todo el historial de entrenamientos y marcas?')) {
+                      setHistory([]);
+                      localStorage.setItem('gimy360_history', JSON.stringify([]));
+                      alert('Historial de entrenamientos vaciado con éxito.');
+                    }
+                  }}
+                  className="text-xs text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Vaciar historial de entrenamientos
+                </button>
                 <button
                   onClick={() => {
                     if (window.confirm('¿Reiniciar rutinas y ejercicios a los valores iniciales predeterminados?')) {
@@ -2388,7 +2320,7 @@ export default function App() {
                       alert('Datos iniciales restablecidos.');
                     }
                   }}
-                  className="text-xs text-rose-400 hover:underline flex items-center gap-1"
+                  className="text-xs text-slate-400 hover:text-slate-300 hover:underline flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Restablecer rutinas y catálogo por defecto
