@@ -1,0 +1,6 @@
+{
+  "name": "Gimy360 - Workout Tracker & Progresión de Carga",
+  "description": "Web App PWA intuitiva y minimalista para registrar entrenamientos de gimnasio, temporizador de descanso y medir la progresión de cargas (1RM y PRs) 100% offline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

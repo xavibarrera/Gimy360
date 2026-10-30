@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="#0f172a" />
+  <circle cx="256" cy="256" r="210" stroke="url(#grad)" stroke-width="12" fill="none" opacity="0.4" stroke-dasharray="16 12"/>
+  <path d="M120 220 L160 220 L160 292 L120 292 Z" fill="#22c55e" rx="8" />
+  <path d="M160 240 L200 240 L200 272 L160 272 Z" fill="#22c55e" />
+  <rect x="200" y="248" width="112" height="16" fill="#f8fafc" rx="4" />
+  <path d="M312 240 L352 240 L352 272 L312 272 Z" fill="#06b6d4" />
+  <path d="M352 220 L392 220 L392 292 L352 292 Z" fill="#06b6d4" rx="8" />
+  <text x="256" y="370" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="44" fill="#22c55e" text-anchor="middle" letter-spacing="4">GIMY<tspan fill="#38bdf8">360</tspan></text>
+</svg>
