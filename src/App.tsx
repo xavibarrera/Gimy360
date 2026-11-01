@@ -129,15 +129,34 @@ export interface AppSettings {
    ========================================================================== */
 
 const INITIAL_EXERCISES: Exercise[] = [
-  // Pecho
+  // =========================================================================
+  // PECHO
+  // =========================================================================
   { id: 'ex-1', name: 'Press de Banca Plano', equipment: 'barra', muscle: 'pecho' },
   { id: 'ex-2', name: 'Press Inclinado con Mancuernas', equipment: 'mancuerna', muscle: 'pecho' },
   { id: 'ex-3', name: 'Aperturas en Cruce de Poleas', equipment: 'polea', muscle: 'pecho' },
   { id: 'ex-4', name: 'Press de Pecho en Máquina', equipment: 'maquina', muscle: 'pecho' },
   { id: 'ex-5', name: 'Fondos en Paralelas (Dips)', equipment: 'corporal', muscle: 'pecho' },
   { id: 'ex-6', name: 'Press Inclinado en Multipower', equipment: 'smith', muscle: 'pecho' },
+  { id: 'ex-37', name: 'Press Inclinado con Barra', equipment: 'barra', muscle: 'pecho' },
+  { id: 'ex-38', name: 'Press Declinado con Barra', equipment: 'barra', muscle: 'pecho' },
+  { id: 'ex-39', name: 'Press de Banca Plano con Mancuernas', equipment: 'mancuerna', muscle: 'pecho' },
+  { id: 'ex-40', name: 'Press Declinado con Mancuernas', equipment: 'mancuerna', muscle: 'pecho' },
+  { id: 'ex-41', name: 'Aperturas Planas con Mancuernas', equipment: 'mancuerna', muscle: 'pecho' },
+  { id: 'ex-42', name: 'Aperturas Inclinadas con Mancuernas', equipment: 'mancuerna', muscle: 'pecho' },
+  { id: 'ex-43', name: 'Pec Deck / Contractor de Pecho', equipment: 'maquina', muscle: 'pecho' },
+  { id: 'ex-44', name: 'Press de Pecho Convergente', equipment: 'maquina', muscle: 'pecho' },
+  { id: 'ex-45', name: 'Cruce de Poleas Bajas (Haz Clavicular)', equipment: 'polea', muscle: 'pecho' },
+  { id: 'ex-46', name: 'Cruce de Poleas Altas a Bajas', equipment: 'polea', muscle: 'pecho' },
+  { id: 'ex-47', name: 'Press de Pecho Plano en Multipower', equipment: 'smith', muscle: 'pecho' },
+  { id: 'ex-48', name: 'Press Declinado en Multipower', equipment: 'smith', muscle: 'pecho' },
+  { id: 'ex-49', name: 'Flexiones de Pecho (Push-ups)', equipment: 'corporal', muscle: 'pecho' },
+  { id: 'ex-50', name: 'Flexiones Declinadas', equipment: 'corporal', muscle: 'pecho' },
+  { id: 'ex-51', name: 'Pullover con Mancuerna en Banco', equipment: 'mancuerna', muscle: 'pecho' },
 
-  // Espalda
+  // =========================================================================
+  // ESPALDA
+  // =========================================================================
   { id: 'ex-7', name: 'Jalón al Pecho en Polea', equipment: 'polea', muscle: 'espalda' },
   { id: 'ex-8', name: 'Remo con Barra 45°', equipment: 'barra', muscle: 'espalda' },
   { id: 'ex-9', name: 'Remo Gironda en Polea Baja', equipment: 'polea', muscle: 'espalda' },
@@ -145,8 +164,26 @@ const INITIAL_EXERCISES: Exercise[] = [
   { id: 'ex-11', name: 'Peso Muerto Convencional', equipment: 'barra', muscle: 'espalda' },
   { id: 'ex-12', name: 'Remo con Mancuerna a una Mano', equipment: 'mancuerna', muscle: 'espalda' },
   { id: 'ex-13', name: 'Pull-over en Polea Alta', equipment: 'polea', muscle: 'espalda' },
+  { id: 'ex-52', name: 'Dominadas Supinas (Chin-ups)', equipment: 'corporal', muscle: 'espalda' },
+  { id: 'ex-53', name: 'Dominadas Agarre Neutro', equipment: 'corporal', muscle: 'espalda' },
+  { id: 'ex-54', name: 'Jalón al Pecho Agarre Neutro / Cerrado', equipment: 'polea', muscle: 'espalda' },
+  { id: 'ex-55', name: 'Jalón Unilateral en Polea Alta', equipment: 'polea', muscle: 'espalda' },
+  { id: 'ex-56', name: 'Remo en Barra T con Apoyo al Pecho', equipment: 'maquina', muscle: 'espalda' },
+  { id: 'ex-57', name: 'Remo en Barra T Libre', equipment: 'barra', muscle: 'espalda' },
+  { id: 'ex-58', name: 'Remo Pendlay', equipment: 'barra', muscle: 'espalda' },
+  { id: 'ex-59', name: 'Remo Seal Row en Banco Plano', equipment: 'mancuerna', muscle: 'espalda' },
+  { id: 'ex-60', name: 'Remo en Máquina de Palancas', equipment: 'maquina', muscle: 'espalda' },
+  { id: 'ex-61', name: 'Remo en Polea Unilateral', equipment: 'polea', muscle: 'espalda' },
+  { id: 'ex-62', name: 'Remo en Multipower (Smith)', equipment: 'smith', muscle: 'espalda' },
+  { id: 'ex-63', name: 'Hiperextensiones Lumbares', equipment: 'corporal', muscle: 'espalda' },
+  { id: 'ex-64', name: 'Peso Muerto Sumo', equipment: 'barra', muscle: 'espalda' },
+  { id: 'ex-65', name: 'Encogimientos de Trapecio con Barra', equipment: 'barra', muscle: 'espalda' },
+  { id: 'ex-66', name: 'Encogimientos de Trapecio con Mancuernas', equipment: 'mancuerna', muscle: 'espalda' },
+  { id: 'ex-67', name: 'Encogimientos en Multipower', equipment: 'smith', muscle: 'espalda' },
 
-  // Piernas
+  // =========================================================================
+  // PIERNAS
+  // =========================================================================
   { id: 'ex-14', name: 'Sentadilla Trasera con Barra', equipment: 'barra', muscle: 'piernas' },
   { id: 'ex-15', name: 'Prensa Inclinada 45°', equipment: 'maquina', muscle: 'piernas' },
   { id: 'ex-16', name: 'Extensión de Cuádriceps', equipment: 'maquina', muscle: 'piernas' },
@@ -154,28 +191,93 @@ const INITIAL_EXERCISES: Exercise[] = [
   { id: 'ex-18', name: 'Sentadilla Búlgara con Mancuernas', equipment: 'mancuerna', muscle: 'piernas' },
   { id: 'ex-19', name: 'Hip Thrust con Barra', equipment: 'barra', muscle: 'piernas' },
   { id: 'ex-20', name: 'Elevación de Gemelos de Pie', equipment: 'smith', muscle: 'piernas' },
+  { id: 'ex-68', name: 'Sentadilla Frontal con Barra', equipment: 'barra', muscle: 'piernas' },
+  { id: 'ex-69', name: 'Sentadilla Hack en Máquina', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-70', name: 'Sentadilla en Multipower', equipment: 'smith', muscle: 'piernas' },
+  { id: 'ex-71', name: 'Sentadilla Goblet con Mancuerna', equipment: 'mancuerna', muscle: 'piernas' },
+  { id: 'ex-72', name: 'Zancadas Caminando con Mancuernas', equipment: 'mancuerna', muscle: 'piernas' },
+  { id: 'ex-73', name: 'Sentadilla Búlgara en Multipower', equipment: 'smith', muscle: 'piernas' },
+  { id: 'ex-74', name: 'Peso Muerto Rumano con Barra', equipment: 'barra', muscle: 'piernas' },
+  { id: 'ex-75', name: 'Peso Muerto Rumano con Mancuernas', equipment: 'mancuerna', muscle: 'piernas' },
+  { id: 'ex-76', name: 'Curl Femoral Sentado', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-77', name: 'Curl Femoral de Pie en Polea', equipment: 'polea', muscle: 'piernas' },
+  { id: 'ex-78', name: 'Curl Nórdico', equipment: 'corporal', muscle: 'piernas' },
+  { id: 'ex-79', name: 'Prensa Horizontal de Piernas', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-80', name: 'Abductores en Máquina', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-81', name: 'Aductores en Máquina', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-82', name: 'Patada de Glúteo en Polea', equipment: 'polea', muscle: 'piernas' },
+  { id: 'ex-83', name: 'Hip Thrust en Máquina', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-84', name: 'Elevación de Gemelos Sentado', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-85', name: 'Elevación de Gemelos en Prensa', equipment: 'maquina', muscle: 'piernas' },
+  { id: 'ex-86', name: 'Elevación de Talones a una Pierna', equipment: 'corporal', muscle: 'piernas' },
 
-  // Hombro
+  // =========================================================================
+  // HOMBRO
+  // =========================================================================
   { id: 'ex-21', name: 'Press Militar de Pie con Barra', equipment: 'barra', muscle: 'hombro' },
   { id: 'ex-22', name: 'Elevaciones Laterales con Mancuerna', equipment: 'mancuerna', muscle: 'hombro' },
   { id: 'ex-23', name: 'Elevaciones Laterales en Polea', equipment: 'polea', muscle: 'hombro' },
   { id: 'ex-24', name: 'Face Pull con Cuerda', equipment: 'polea', muscle: 'hombro' },
   { id: 'ex-25', name: 'Pájaros para Deltoides Posterior', equipment: 'mancuerna', muscle: 'hombro' },
   { id: 'ex-26', name: 'Press Militar en Smith', equipment: 'smith', muscle: 'hombro' },
+  { id: 'ex-87', name: 'Press Militar Sentado con Mancuernas', equipment: 'mancuerna', muscle: 'hombro' },
+  { id: 'ex-88', name: 'Press Arnold con Mancuernas', equipment: 'mancuerna', muscle: 'hombro' },
+  { id: 'ex-89', name: 'Press de Hombros en Máquina', equipment: 'maquina', muscle: 'hombro' },
+  { id: 'ex-90', name: 'Elevaciones Frontales con Mancuerna', equipment: 'mancuerna', muscle: 'hombro' },
+  { id: 'ex-91', name: 'Elevaciones Frontales en Polea', equipment: 'polea', muscle: 'hombro' },
+  { id: 'ex-92', name: 'Elevaciones Frontales con Disco', equipment: 'barra', muscle: 'hombro' },
+  { id: 'ex-93', name: 'Elevaciones Laterales en Máquina', equipment: 'maquina', muscle: 'hombro' },
+  { id: 'ex-94', name: 'Pájaros en Máquina Pec Deck Invertida', equipment: 'maquina', muscle: 'hombro' },
+  { id: 'ex-95', name: 'Cruce de Poleas para Deltoides Posterior', equipment: 'polea', muscle: 'hombro' },
+  { id: 'ex-96', name: 'Remo al Mentón con Barra Z', equipment: 'barra', muscle: 'hombro' },
+  { id: 'ex-97', name: 'Remo al Mentón en Polea', equipment: 'polea', muscle: 'hombro' },
+  { id: 'ex-98', name: 'Y-Raises en Polea / Banco Inclinado', equipment: 'polea', muscle: 'hombro' },
 
-  // Brazos
+  // =========================================================================
+  // BRAZOS
+  // =========================================================================
   { id: 'ex-27', name: 'Curl de Bíceps con Barra Z', equipment: 'barra', muscle: 'brazos' },
   { id: 'ex-28', name: 'Curl Martillo con Mancuernas', equipment: 'mancuerna', muscle: 'brazos' },
   { id: 'ex-29', name: 'Curl en Banco Scott', equipment: 'maquina', muscle: 'brazos' },
   { id: 'ex-30', name: 'Extensiones de Tríceps en Polea', equipment: 'polea', muscle: 'brazos' },
   { id: 'ex-31', name: 'Press Francés con Barra Z', equipment: 'barra', muscle: 'brazos' },
   { id: 'ex-32', name: 'Fondos entre Bancos para Tríceps', equipment: 'corporal', muscle: 'brazos' },
+  { id: 'ex-99', name: 'Curl de Bíceps Alterno con Mancuernas', equipment: 'mancuerna', muscle: 'brazos' },
+  { id: 'ex-100', name: 'Curl de Bíceps Inclinado en Banco', equipment: 'mancuerna', muscle: 'brazos' },
+  { id: 'ex-101', name: 'Curl Concentrado con Mancuerna', equipment: 'mancuerna', muscle: 'brazos' },
+  { id: 'ex-102', name: 'Curl Araña (Spider Curl) con Barra Z', equipment: 'barra', muscle: 'brazos' },
+  { id: 'ex-103', name: 'Curl de Bíceps en Polea Baja con Barra', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-104', name: 'Curl Bayesiano en Polea', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-105', name: 'Curl Martillo en Polea con Cuerda', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-106', name: 'Curl 21 con Barra', equipment: 'barra', muscle: 'brazos' },
+  { id: 'ex-107', name: 'Extensiones Tras Nuca con Cuerda en Polea', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-108', name: 'Extensión de Tríceps Unilateral en Polea', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-109', name: 'Press Cerrado para Tríceps en Banca', equipment: 'barra', muscle: 'brazos' },
+  { id: 'ex-110', name: 'Extensión Francesa con Mancuerna tras Nuca', equipment: 'mancuerna', muscle: 'brazos' },
+  { id: 'ex-111', name: 'Patada de Tríceps con Mancuerna', equipment: 'mancuerna', muscle: 'brazos' },
+  { id: 'ex-112', name: 'Patada de Tríceps en Polea', equipment: 'polea', muscle: 'brazos' },
+  { id: 'ex-113', name: 'Extensión de Tríceps en Multipower', equipment: 'smith', muscle: 'brazos' },
+  { id: 'ex-114', name: 'Curl de Muñeca Supino con Barra (Antebrazo)', equipment: 'barra', muscle: 'brazos' },
+  { id: 'ex-115', name: 'Curl de Muñeca Prono con Barra (Antebrazo)', equipment: 'barra', muscle: 'brazos' },
+  { id: 'ex-116', name: 'Paseo del Granjero (Farmer Walk)', equipment: 'mancuerna', muscle: 'brazos' },
 
-  // Core
+  // =========================================================================
+  // CORE
+  // =========================================================================
   { id: 'ex-33', name: 'Crunch Abdominal en Polea Alta', equipment: 'polea', muscle: 'core' },
   { id: 'ex-34', name: 'Elevación de Piernas Colgado', equipment: 'corporal', muscle: 'core' },
   { id: 'ex-35', name: 'Plancha Isométrica', equipment: 'corporal', muscle: 'core' },
   { id: 'ex-36', name: 'Rueda Abdominal (Ab Wheel)', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-117', name: 'Crunch Abdominal en Suelo', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-118', name: 'Crunch en Banco Declinado', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-119', name: 'Elevación de Rodillas en Silla Romana', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-120', name: 'Plancha Lateral Isométrica', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-121', name: 'Giros Rusos (Russian Twists)', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-122', name: 'Leñador en Polea (Woodchopper)', equipment: 'polea', muscle: 'core' },
+  { id: 'ex-123', name: 'Vacío Abdominal (Stomach Vacuum)', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-124', name: 'Tijeras Abdominales (Flutter Kicks)', equipment: 'corporal', muscle: 'core' },
+  { id: 'ex-125', name: 'Crunch Abdominal en Máquina', equipment: 'maquina', muscle: 'core' },
+  { id: 'ex-126', name: 'Dead Bug', equipment: 'corporal', muscle: 'core' },
 ];
 
 const INITIAL_ROUTINES: Routine[] = [
@@ -448,10 +550,27 @@ export default function App() {
   // Navegación principal: 'rutinas' | 'entreno' | 'ejercicios' | 'historial' | 'ajustes'
   const [activeTab, setActiveTab] = useState<'rutinas' | 'entreno' | 'ejercicios' | 'historial' | 'ajustes'>('rutinas');
 
-  // Estado de Ejercicios
+  // Estado de Ejercicios (con auto-sincronización de catálogo ampliado y preservación de ejercicios propios)
   const [exercises, setExercises] = useState<Exercise[]>(() => {
     const saved = localStorage.getItem('gimy360_exercises');
-    return saved ? JSON.parse(saved) : INITIAL_EXERCISES;
+    if (saved) {
+      try {
+        const parsed: Exercise[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const existingIds = new Set(parsed.map((e) => e.id));
+          const missingDefaults = INITIAL_EXERCISES.filter((e) => !existingIds.has(e.id));
+          if (missingDefaults.length > 0) {
+            const merged = [...parsed, ...missingDefaults];
+            localStorage.setItem('gimy360_exercises', JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
+      } catch (err) {
+        console.warn('Error reading stored exercises, restoring defaults:', err);
+      }
+    }
+    return INITIAL_EXERCISES;
   });
 
   // Estado de Rutinas
