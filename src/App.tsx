@@ -44,7 +44,10 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  Target
+  Target,
+  Wand2,
+  Lightbulb,
+  RefreshCw
 } from 'lucide-react';
 
 /* ==========================================================================
@@ -314,6 +317,514 @@ const INITIAL_ROUTINES: Routine[] = [
     dayOfWeek: 'sabado',
   },
 ];
+
+/* ==========================================================================
+   TIPOS Y ALGORITMO GENERADOR DE RUTINAS INTELIGENTES (ONBOARDING WIZARD)
+   ========================================================================== */
+
+export type WizardDays = 2 | 3 | 4 | 5 | 6;
+export type WizardEquipment = 'gimnasio_completo' | 'solo_mancuernas' | 'peso_corporal';
+export type WizardGoal = 'hipertrofia' | 'fuerza' | 'acondicionamiento';
+export type WizardLevel = 'principiante' | 'intermedio' | 'avanzado';
+
+export interface WizardConfig {
+  days: WizardDays;
+  equipment: WizardEquipment;
+  goal: WizardGoal;
+  level: WizardLevel;
+}
+
+export function generateIntelligentRoutines(config: WizardConfig, allExercises: Exercise[]): Routine[] {
+  // 1. Filtro de equipamiento disponible
+  const isEquipmentAllowed = (eq: Equipment) => {
+    if (config.equipment === 'peso_corporal') return eq === 'corporal';
+    if (config.equipment === 'solo_mancuernas') return eq === 'mancuerna' || eq === 'corporal';
+    return true; // gimnasio completo
+  };
+
+  const pool = allExercises.filter((e) => isEquipmentAllowed(e.equipment));
+
+  // Helper para seleccionar un ejercicio no repetido
+  const pick = (muscle: MuscleGroup, preferredKeywords: string[], usedIds: Set<string>): string => {
+    for (const kw of preferredKeywords) {
+      const match = pool.find(
+        (e) => e.muscle === muscle && !usedIds.has(e.id) && e.name.toLowerCase().includes(kw.toLowerCase())
+      );
+      if (match) {
+        usedIds.add(match.id);
+        return match.id;
+      }
+    }
+    // Fallback dentro del mismo grupo muscular en el pool filtrado
+    const anyMuscle = pool.find((e) => e.muscle === muscle && !usedIds.has(e.id));
+    if (anyMuscle) {
+      usedIds.add(anyMuscle.id);
+      return anyMuscle.id;
+    }
+    // Fallback a peso corporal de la base general si estuviera muy restringido
+    const corporalFallback = allExercises.find(
+      (e) => e.muscle === muscle && e.equipment === 'corporal' && !usedIds.has(e.id)
+    );
+    if (corporalFallback) {
+      usedIds.add(corporalFallback.id);
+      return corporalFallback.id;
+    }
+    // Último recurso: cualquier ejercicio disponible
+    const anyFallback = pool.find((e) => !usedIds.has(e.id)) || allExercises[0];
+    usedIds.add(anyFallback.id);
+    return anyFallback.id;
+  };
+
+  // Metadatos según objetivo y nivel
+  const seriesInfo =
+    config.level === 'principiante'
+      ? '3 series base por ejercicio'
+      : config.level === 'intermedio'
+      ? '3 a 4 series base con sobrecarga progresiva'
+      : '4 series efectivas con máxima intensidad y esfuerzo';
+
+  const goalDesc =
+    config.goal === 'fuerza'
+      ? 'Foco en 4-6 repeticiones pesadas en ejercicios multiarticulares y descansos completos.'
+      : config.goal === 'acondicionamiento'
+      ? 'Foco en 12-15 repeticiones con descansos dinámicos y alta densidad metabólica.'
+      : 'Foco en 8-12 repeticiones para estímulo óptimo de hipertrofia y tensión mecánica.';
+
+  const results: Routine[] = [];
+
+  // =========================================================================
+  // 2 DÍAS: FULL BODY 2X
+  // =========================================================================
+  if (config.days === 2) {
+    const usedA = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-1`,
+      title: 'Full Body A (Fuerza Base)',
+      category: 'Full Body',
+      dayOfWeek: 'lunes',
+      description: `Sesión de cuerpo completo multiarticular. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla trasera', 'prensa inclinada', 'sentadilla goblet'], usedA),
+        pick('pecho', ['press de banca plano', 'press inclinado', 'flexiones'], usedA),
+        pick('espalda', ['remo con barra', 'remo con mancuerna', 'dominadas'], usedA),
+        pick('hombro', ['press militar', 'press arnold', 'elevaciones laterales'], usedA),
+        pick('brazos', ['curl de bíceps con barra', 'curl martillo'], usedA),
+        pick('core', ['plancha isométrica', 'rueda abdominal', 'crunch'], usedA),
+      ],
+    });
+
+    const usedB = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-2`,
+      title: 'Full Body B (Tensión & Balance)',
+      category: 'Full Body',
+      dayOfWeek: 'jueves',
+      description: `Cadena posterior y músculos antagonistas. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['peso muerto rumano', 'hip thrust', 'curl femoral'], usedB),
+        pick('espalda', ['jalón al pecho', 'remo gironda', 'dominadas neutras'], usedB),
+        pick('pecho', ['press inclinado con mancuernas', 'aperturas', 'fondos'], usedB),
+        pick('hombro', ['elevaciones laterales', 'face pull'], usedB),
+        pick('brazos', ['extensiones de tríceps en polea', 'press francés', 'fondos'], usedB),
+        pick('core', ['elevación de piernas', 'giros rusos', 'dead bug'], usedB),
+      ],
+    });
+  }
+
+  // =========================================================================
+  // 3 DÍAS: FULL BODY 3X
+  // =========================================================================
+  else if (config.days === 3) {
+    const usedA = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-1`,
+      title: 'Full Body A (Énfasis Empuje)',
+      category: 'Full Body',
+      dayOfWeek: 'lunes',
+      description: `Potencia de empuje y cuádriceps. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla trasera', 'prensa inclinada', 'goblet'], usedA),
+        pick('pecho', ['press de banca plano', 'press con mancuernas', 'flexiones'], usedA),
+        pick('espalda', ['remo con barra', 'remo con mancuerna', 'dominadas'], usedA),
+        pick('hombro', ['press militar de pie', 'press de hombros'], usedA),
+        pick('brazos', ['extensiones de tríceps en polea', 'fondos entre bancos'], usedA),
+        pick('core', ['plancha isométrica', 'crunch abdominal'], usedA),
+      ],
+    });
+
+    const usedB = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-2`,
+      title: 'Full Body B (Énfasis Jalón)',
+      category: 'Full Body',
+      dayOfWeek: 'miercoles',
+      description: `Densidad de tracción e isquiosurales. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['peso muerto rumano', 'hip thrust', 'curl femoral'], usedB),
+        pick('espalda', ['jalón al pecho en polea', 'dominadas pronas', 'remo gironda'], usedB),
+        pick('pecho', ['press inclinado con mancuernas', 'aperturas', 'dips'], usedB),
+        pick('hombro', ['face pull con cuerda', 'pájaros para deltoides'], usedB),
+        pick('brazos', ['curl de bíceps con barra z', 'curl martillo'], usedB),
+        pick('core', ['elevación de piernas colgado', 'rueda abdominal'], usedB),
+      ],
+    });
+
+    const usedC = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-3`,
+      title: 'Full Body C (Hipertrofia Global)',
+      category: 'Full Body',
+      dayOfWeek: 'viernes',
+      description: `Estímulo metabólico y volumen periférico. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla búlgara con mancuernas', 'prensa', 'extensión de cuádriceps'], usedC),
+        pick('pecho', ['press de pecho convergente', 'aperturas en cruce', 'pec deck'], usedC),
+        pick('espalda', ['remo en barra t', 'remo seal row', 'jalón unilateral'], usedC),
+        pick('hombro', ['elevaciones laterales con mancuerna', 'press arnold'], usedC),
+        pick('brazos', ['curl araña', 'press cerrado para tríceps'], usedC),
+        pick('core', ['giros rusos', 'plancha lateral isométrica'], usedC),
+      ],
+    });
+  }
+
+  // =========================================================================
+  // 4 DÍAS: TORSO / PIERNA (UPPER / LOWER SPLIT)
+  // =========================================================================
+  else if (config.days === 4) {
+    const usedT1 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-1`,
+      title: 'Torso A (Fuerza & Densidad)',
+      category: 'Torso',
+      dayOfWeek: 'lunes',
+      description: `Empuje y tirón pesado de tren superior. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press de banca plano', 'press inclinado con mancuernas'], usedT1),
+        pick('espalda', ['remo con barra 45°', 'remo en barra t'], usedT1),
+        pick('hombro', ['press militar de pie', 'press militar sentado'], usedT1),
+        pick('espalda', ['jalón al pecho en polea', 'dominadas'], usedT1),
+        pick('brazos', ['extensiones de tríceps en polea', 'press francés'], usedT1),
+        pick('brazos', ['curl de bíceps con barra z', 'curl martillo'], usedT1),
+      ],
+    });
+
+    const usedP1 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-2`,
+      title: 'Pierna A (Énfasis Cuádriceps)',
+      category: 'Pierna',
+      dayOfWeek: 'martes',
+      description: `Cargas en sentadilla y extensores anteriores. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla trasera con barra', 'sentadilla hack', 'prensa'], usedP1),
+        pick('piernas', ['extensión de cuádriceps', 'sentadilla goblet'], usedP1),
+        pick('piernas', ['curl femoral tumbado', 'curl femoral sentado'], usedP1),
+        pick('piernas', ['elevación de gemelos de pie', 'gemelos en prensa'], usedP1),
+        pick('core', ['plancha isométrica', 'rueda abdominal'], usedP1),
+      ],
+    });
+
+    const usedT2 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-3`,
+      title: 'Torso B (Hipertrofia & Amplitud)',
+      category: 'Torso',
+      dayOfWeek: 'jueves',
+      description: `Ángulos inclinados, dorsales y deltoides. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press inclinado con mancuernas', 'press de pecho'], usedT2),
+        pick('espalda', ['remo gironda en polea', 'remo con mancuerna a una mano'], usedT2),
+        pick('hombro', ['elevaciones laterales con mancuerna', 'elevaciones laterales en polea'], usedT2),
+        pick('pecho', ['aperturas en cruce de poleas', 'pec deck', 'aperturas planas'], usedT2),
+        pick('hombro', ['face pull con cuerda', 'pájaros para deltoides'], usedT2),
+        pick('brazos', ['curl bayesiano en polea', 'patada de tríceps'], usedT2),
+      ],
+    });
+
+    const usedP2 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-4`,
+      title: 'Pierna B (Cadena Posterior & Glúteo)',
+      category: 'Pierna',
+      dayOfWeek: 'viernes',
+      description: `Hip thrust, femorales y zancadas. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['peso muerto rumano con barra', 'peso muerto convencional'], usedP2),
+        pick('piernas', ['hip thrust con barra', 'patada de glúteo en polea'], usedP2),
+        pick('piernas', ['sentadilla búlgara con mancuernas', 'zancadas'], usedP2),
+        pick('piernas', ['curl femoral sentado', 'curl nórdico'], usedP2),
+        pick('piernas', ['elevación de gemelos sentado', 'elevación de talones'], usedP2),
+        pick('core', ['elevación de piernas colgado', 'giros rusos'], usedP2),
+      ],
+    });
+  }
+
+  // =========================================================================
+  // 5 DÍAS: PUSH / PULL / LEGS + TORSO / PIERNA
+  // =========================================================================
+  else if (config.days === 5) {
+    const u1 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-1`,
+      title: 'Empuje (Push Focus)',
+      category: 'Empuje',
+      dayOfWeek: 'lunes',
+      description: `Pectoral, deltoides anterior/lateral y tríceps. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press de banca plano', 'press de banca con mancuernas'], u1),
+        pick('pecho', ['press inclinado con mancuernas', 'press inclinado barra'], u1),
+        pick('hombro', ['press militar de pie', 'press militar sentado'], u1),
+        pick('hombro', ['elevaciones laterales con mancuerna', 'elevaciones polea'], u1),
+        pick('brazos', ['extensiones de tríceps en polea', 'fondos'], u1),
+        pick('brazos', ['press francés con barra z', 'patada de tríceps'], u1),
+      ],
+    });
+
+    const u2 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-2`,
+      title: 'Tirón (Pull Focus)',
+      category: 'Tirón',
+      dayOfWeek: 'martes',
+      description: `Amplitud dorsal, deltoides posterior y flexores de codo. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('espalda', ['jalón al pecho en polea', 'dominadas pronas'], u2),
+        pick('espalda', ['remo con barra 45°', 'remo pendlay'], u2),
+        pick('espalda', ['remo gironda en polea', 'remo unilateral'], u2),
+        pick('hombro', ['face pull con cuerda', 'pájaros para deltoides'], u2),
+        pick('brazos', ['curl de bíceps con barra z', 'curl en banco scott'], u2),
+        pick('brazos', ['curl martillo con mancuernas', 'curl martillo polea'], u2),
+      ],
+    });
+
+    const u3 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-3`,
+      title: 'Pierna Completa (Legs)',
+      category: 'Pierna',
+      dayOfWeek: 'miercoles',
+      description: `Fuerza integral de tren inferior y estabilidad. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla trasera con barra', 'prensa inclinada'], u3),
+        pick('piernas', ['peso muerto rumano con barra', 'hip thrust'], u3),
+        pick('piernas', ['extensión de cuádriceps', 'sentadilla búlgara'], u3),
+        pick('piernas', ['curl femoral tumbado', 'curl femoral sentado'], u3),
+        pick('piernas', ['elevación de gemelos de pie', 'gemelos'], u3),
+        pick('core', ['plancha isométrica', 'rueda abdominal'], u3),
+      ],
+    });
+
+    const u4 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-4`,
+      title: 'Torso Hipertrofia (Upper)',
+      category: 'Torso',
+      dayOfWeek: 'viernes',
+      description: `Trabajo antagonista en superseries y volumen. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press inclinado con mancuernas', 'pec deck'], u4),
+        pick('espalda', ['remo en barra t con apoyo', 'remo seal row'], u4),
+        pick('hombro', ['elevaciones laterales en polea', 'press arnold'], u4),
+        pick('espalda', ['pull-over en polea alta', 'jalón neutro'], u4),
+        pick('brazos', ['curl de bíceps inclinado en banco', 'curl bayesiano'], u4),
+        pick('brazos', ['extensiones tras nuca con cuerda', 'press cerrado'], u4),
+      ],
+    });
+
+    const u5 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-5`,
+      title: 'Pierna & Core (Lower)',
+      category: 'Pierna',
+      dayOfWeek: 'sabado',
+      description: `Enfoque en glúteos, femorales y pared abdominal. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['hip thrust con barra', 'patada de glúteo en polea'], u5),
+        pick('piernas', ['sentadilla búlgara con mancuernas', 'zancadas'], u5),
+        pick('piernas', ['curl femoral sentado', 'curl nórdico'], u5),
+        pick('piernas', ['prensa horizontal de piernas', 'abductores en máquina'], u5),
+        pick('core', ['elevación de rodillas en silla romana', 'tijeras abdominales'], u5),
+        pick('core', ['giros rusos', 'leñador en polea'], u5),
+      ],
+    });
+  }
+
+  // =========================================================================
+  // 6 DÍAS: PUSH / PULL / LEGS (2X) - ALTA FRECUENCIA
+  // =========================================================================
+  else if (config.days === 6) {
+    const s1 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-1`,
+      title: 'Empuje A (Push Fuerza)',
+      category: 'Empuje',
+      dayOfWeek: 'lunes',
+      description: `Press pesado multiarticular y hombro anterior. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press de banca plano', 'press de banca con mancuernas'], s1),
+        pick('hombro', ['press militar de pie con barra', 'press militar sentado'], s1),
+        pick('pecho', ['press inclinado con mancuernas', 'press inclinado barra'], s1),
+        pick('hombro', ['elevaciones laterales con mancuerna', 'polea'], s1),
+        pick('brazos', ['press francés con barra z', 'extensiones en polea'], s1),
+        pick('brazos', ['fondos en paralelas', 'fondos entre bancos'], s1),
+      ],
+    });
+
+    const s2 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-2`,
+      title: 'Tirón A (Pull Densidad)',
+      category: 'Tirón',
+      dayOfWeek: 'martes',
+      description: `Espalda densa, trapecios y bíceps braquial. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('espalda', ['remo con barra 45°', 'remo pendlay'], s2),
+        pick('espalda', ['jalón al pecho en polea', 'dominadas pronas'], s2),
+        pick('espalda', ['remo gironda en polea', 'remo mancuerna'], s2),
+        pick('hombro', ['pájaros para deltoides', 'face pull'], s2),
+        pick('brazos', ['curl de bíceps con barra z', 'curl en banco scott'], s2),
+        pick('brazos', ['curl martillo con mancuernas', 'curl martillo polea'], s2),
+      ],
+    });
+
+    const s3 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-3`,
+      title: 'Pierna A (Cuádriceps & Gemelos)',
+      category: 'Pierna',
+      dayOfWeek: 'miercoles',
+      description: `Sentadilla profunda y extensores de rodilla. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['sentadilla trasera con barra', 'sentadilla frontal'], s3),
+        pick('piernas', ['prensa inclinada 45°', 'sentadilla hack'], s3),
+        pick('piernas', ['extensión de cuádriceps', 'sentadilla goblet'], s3),
+        pick('piernas', ['curl femoral tumbado', 'curl nórdico'], s3),
+        pick('piernas', ['elevación de gemelos de pie', 'gemelos'], s3),
+        pick('core', ['plancha isométrica', 'rueda abdominal'], s3),
+      ],
+    });
+
+    const s4 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-4`,
+      title: 'Empuje B (Push Hipertrofia)',
+      category: 'Empuje',
+      dayOfWeek: 'jueves',
+      description: `Aislamiento pectoral, clavicular y tríceps. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('pecho', ['press inclinado con mancuernas', 'press inclinado barra'], s4),
+        pick('pecho', ['press de pecho convergente', 'aperturas'], s4),
+        pick('hombro', ['press arnold con mancuernas', 'elevaciones frontales'], s4),
+        pick('pecho', ['cruce de poleas', 'pec deck'], s4),
+        pick('brazos', ['extensiones tras nuca con cuerda', 'polea'], s4),
+        pick('brazos', ['patada de tríceps con mancuerna', 'fondos'], s4),
+      ],
+    });
+
+    const s5 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-5`,
+      title: 'Tirón B (Pull Amplitud)',
+      category: 'Tirón',
+      dayOfWeek: 'viernes',
+      description: `Dorsal ancho, pull-over y bíceps en banco inclinado. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('espalda', ['dominadas agarre neutro', 'jalón al pecho agarre neutro'], s5),
+        pick('espalda', ['remo en barra t con apoyo', 'remo seal row'], s5),
+        pick('espalda', ['pull-over en polea alta', 'remo en polea unilateral'], s5),
+        pick('hombro', ['cruce de poleas para deltoides', 'face pull'], s5),
+        pick('brazos', ['curl de bíceps inclinado en banco', 'curl araña'], s5),
+        pick('brazos', ['curl bayesiano en polea', 'curl 21 con barra'], s5),
+      ],
+    });
+
+    const s6 = new Set<string>();
+    results.push({
+      id: `rot-smart-${Date.now()}-6`,
+      title: 'Pierna B (Cadena Posterior & Glúteos)',
+      category: 'Pierna',
+      dayOfWeek: 'sabado',
+      description: `Hip thrust pesado, femorales e isquiosurales. ${seriesInfo}. ${goalDesc}`,
+      isCustom: true,
+      exerciseIds: [
+        pick('piernas', ['hip thrust con barra', 'hip thrust en máquina'], s6),
+        pick('piernas', ['peso muerto rumano con barra', 'peso muerto rumano con mancuernas'], s6),
+        pick('piernas', ['sentadilla búlgara con mancuernas', 'zancadas'], s6),
+        pick('piernas', ['curl femoral sentado', 'curl femoral de pie'], s6),
+        pick('piernas', ['elevación de gemelos sentado', 'gemelos en prensa'], s6),
+        pick('core', ['elevación de piernas colgado', 'giros rusos'], s6),
+      ],
+    });
+  }
+
+  return results;
+}
+
+export interface ProgressiveOverloadFeedback {
+  hasHistory: boolean;
+  shouldIncrease: boolean;
+  message: string;
+  previousWeight: number;
+  previousReps: number;
+  completedSetsCount: number;
+}
+
+export function getProgressiveOverloadFeedback(
+  exerciseId: string,
+  history: WorkoutSession[],
+  unit: 'kg' | 'lb'
+): ProgressiveOverloadFeedback {
+  for (const session of history) {
+    const match = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (match && match.sets && match.sets.length > 0) {
+      const completedSets = match.sets.filter((s) => s.completed && s.type !== 'W');
+      if (completedSets.length > 0) {
+        const maxWeight = Math.max(...completedSets.map((s) => s.weight));
+        const avgReps = Math.round(completedSets.reduce((sum, s) => sum + s.reps, 0) / completedSets.length);
+        const shouldIncrease = avgReps >= 8 && maxWeight > 0;
+        const incText = unit === 'kg' ? '+2.5 kg o +1 rep' : '+5 lb o +1 rep';
+
+        return {
+          hasHistory: true,
+          shouldIncrease,
+          message: shouldIncrease
+            ? `💡 Sugerencia: En tu última sesión completaste ${completedSets.length} series a ${maxWeight} ${unit} × ${avgReps} reps. ¡Intenta ${incText} hoy!`
+            : `🎯 Marca anterior: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} series). Consolida la técnica antes de aumentar peso.`,
+          previousWeight: maxWeight,
+          previousReps: avgReps,
+          completedSetsCount: completedSets.length,
+        };
+      }
+    }
+  }
+  return {
+    hasHistory: false,
+    shouldIncrease: false,
+    message: '🎯 Primera vez con este ejercicio: calibra un peso moderado para dominar la técnica.',
+    previousWeight: 0,
+    previousReps: 0,
+    completedSetsCount: 0,
+  };
+}
 
 /* ==========================================================================
    UTILIDADES & HELPERS
@@ -659,6 +1170,25 @@ export default function App() {
   const [showCancelWorkoutModal, setShowCancelWorkoutModal] = useState<boolean>(false);
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
 
+  // Estados para el Generador Inteligente de Rutinas (Onboarding Wizard)
+  const [showWizardModal, setShowWizardModal] = useState<boolean>(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [wizardConfig, setWizardConfig] = useState<WizardConfig>({
+    days: 4,
+    equipment: 'gimnasio_completo',
+    goal: 'hipertrofia',
+    level: 'intermedio',
+  });
+  const [wizardReplaceMode, setWizardReplaceMode] = useState<'replace' | 'append'>('replace');
+
+  // Estados para la Sustitución de Ejercicios en Caliente
+  const [substituteExerciseModal, setSubstituteExerciseModal] = useState<{
+    workoutExIndex: number;
+    currentExercise: Exercise;
+  } | null>(null);
+  const [substituteFilterEquipment, setSubstituteFilterEquipment] = useState<string>('todos');
+  const [substituteSearchQuery, setSubstituteSearchQuery] = useState<string>('');
+
   // Filtros de ejercicios
   const [searchExerciseQuery, setSearchExerciseQuery] = useState<string>('');
   const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string>('todos');
@@ -996,6 +1526,73 @@ export default function App() {
     targetEx.sets = targetEx.sets.filter((_, i) => i !== setIndex);
     updatedExercises[exIndex] = targetEx;
     setActiveWorkout({ ...activeWorkout, exercises: updatedExercises });
+  };
+
+  // Apertura y sustitución de ejercicio en caliente
+  const handleOpenSubstituteModal = (workoutExIndex: number) => {
+    if (!activeWorkout) return;
+    const target = activeWorkout.exercises[workoutExIndex];
+    if (!target) return;
+    const currentEx = exercises.find((e) => e.id === target.exerciseId);
+    if (!currentEx) return;
+
+    setSubstituteExerciseModal({
+      workoutExIndex,
+      currentExercise: currentEx,
+    });
+    setSubstituteFilterEquipment('todos');
+    setSubstituteSearchQuery('');
+  };
+
+  const handleApplySubstituteExercise = (newExerciseId: string) => {
+    if (!activeWorkout || !substituteExerciseModal) return;
+    const { workoutExIndex } = substituteExerciseModal;
+    const updated = [...activeWorkout.exercises];
+    const target = { ...updated[workoutExIndex] };
+
+    // Buscar si el usuario tiene registros previos en el ejercicio sustituto
+    const prevSets = getPreviousExerciseSets(newExerciseId);
+
+    // Conservar las series ya hechas o actualizar la referencia en las pendientes
+    const updatedSets = target.sets.map((s, idx) => {
+      if (s.completed) return s;
+      const ref = prevSets[idx] || prevSets[0];
+      return {
+        ...s,
+        weight: ref ? ref.weight : s.weight,
+        reps: ref ? ref.reps : s.reps,
+      };
+    });
+
+    updated[workoutExIndex] = {
+      ...target,
+      exerciseId: newExerciseId,
+      sets: updatedSets,
+    };
+
+    setActiveWorkout({
+      ...activeWorkout,
+      exercises: updated,
+    });
+
+    setSubstituteExerciseModal(null);
+  };
+
+  // Asistente Inteligente de Rutinas (Onboarding Wizard)
+  const handleOpenWizard = () => {
+    setWizardStep(1);
+    setShowWizardModal(true);
+  };
+
+  const handleApplyGeneratedRoutines = () => {
+    const generated = generateIntelligentRoutines(wizardConfig, exercises);
+    if (wizardReplaceMode === 'replace') {
+      setRoutines(generated);
+    } else {
+      setRoutines((prev) => [...prev, ...generated]);
+    }
+    setShowWizardModal(false);
+    setActiveTab('rutinas');
   };
 
   // Cancelar entreno (Abre modal nativo de la app para evitar fallos de window.confirm)
@@ -1841,19 +2438,30 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Cabecera de Rutinas con Botón Crear */}
-              <div className="flex items-center justify-between pt-1">
+              {/* Cabecera de Rutinas con Botón Crear y Generador Inteligente */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Tus Rutinas</h3>
                   <p className="text-xs text-slate-500">{routines.length} esquemas listos para ejecutar</p>
                 </div>
-                <button
-                  onClick={openCreateRoutineModal}
-                  className="flex items-center gap-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-2 rounded-xl border border-slate-700 active:scale-95 transition"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Crear Rutina</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenWizard}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs font-black bg-gradient-to-r from-emerald-500/20 via-cyan-500/20 to-emerald-500/10 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-400 border border-emerald-500/40 px-3.5 py-2 rounded-xl active:scale-95 transition shadow-sm"
+                    title="Crear un plan semanal completo adaptado a tus días, material y nivel"
+                  >
+                    <Wand2 className="w-4 h-4 text-cyan-400" />
+                    <span>+ Generar Rutina Inteligente</span>
+                  </button>
+                  <button
+                    onClick={openCreateRoutineModal}
+                    className="flex items-center justify-center gap-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl border border-slate-700 active:scale-95 transition"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span className="hidden sm:inline">Crear Manual</span>
+                    <span className="sm:hidden">Crear</span>
+                  </button>
+                </div>
               </div>
 
               {/* Lista de Rutinas (Ordenadas por Día de la Semana y Alfabéticamente) */}
@@ -1944,8 +2552,31 @@ export default function App() {
                 })}
 
                 {sortedRoutines.length === 0 && (
-                  <div className="text-center py-10 px-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
-                    No hay rutinas creadas todavía. Pulsa "+ Crear Rutina" para diseñar tu primer esquema.
+                  <div className="text-center py-10 px-5 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-dashed border-slate-800 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mx-auto flex items-center justify-center">
+                      <Wand2 className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-white">No tienes rutinas creadas todavía</h4>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                        Crea un programa completo a medida en 30 segundos con el generador inteligente según tus días y material.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xs mx-auto">
+                      <button
+                        onClick={handleOpenWizard}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2"
+                      >
+                        <Wand2 className="w-4 h-4" />
+                        <span>Generar Plan Inteligente</span>
+                      </button>
+                      <button
+                        onClick={openCreateRoutineModal}
+                        className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs active:scale-95 transition"
+                      >
+                        Crear Manualmente
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2089,6 +2720,20 @@ export default function App() {
                               )}
                             </span>
 
+                            {/* Botón Sustituir Ejercicio (Máquina Ocupada) */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenSubstituteModal(exIdx);
+                              }}
+                              className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-cyan-500/10 flex items-center gap-1 border border-transparent hover:border-cyan-500/30"
+                              title="Sustituir por alternativa si la máquina está ocupada"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                              <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">Sustituir</span>
+                            </button>
+
                             {/* Botón Eliminar Ejercicio */}
                             <button
                               onClick={(e) => {
@@ -2132,7 +2777,46 @@ export default function App() {
 
                         {/* Contenido Expandido: Cabecera de Series, Filas y Botón Añadir */}
                         {isExpanded && (
-                          <div className="p-3.5 sm:p-4 pt-1 border-t border-slate-800/80 space-y-2 animate-in fade-in duration-150">
+                          <div className="p-3.5 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
+                            {/* Banner de Sobrecarga Progresiva */}
+                            {(() => {
+                              const feedback = getProgressiveOverloadFeedback(workoutEx.exerciseId, history, settings.unit);
+                              return (
+                                <div
+                                  className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
+                                    feedback.shouldIncrease
+                                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                                      : feedback.hasHistory
+                                      ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
+                                      : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <Lightbulb
+                                      className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                        feedback.shouldIncrease ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'
+                                      }`}
+                                    />
+                                    <div className="min-w-0">
+                                      <span className="font-extrabold block text-[10px] uppercase tracking-wider mb-0.5">
+                                        {feedback.shouldIncrease ? '⚡ Sobrecarga Progresiva Sugerida' : '🎯 Guía de Sesión'}
+                                      </span>
+                                      <p className="text-[11px] leading-relaxed opacity-95">{feedback.message}</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSubstituteModal(exIdx)}
+                                    className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition"
+                                    title="Máquina ocupada: cambiar ejercicio"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    <span>Cambiar</span>
+                                  </button>
+                                </div>
+                              );
+                            })()}
+
                             {/* Cabecera de Columnas de Series */}
                             <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-1 text-center">
                               <span className="col-span-2 text-left">Serie</span>
@@ -3650,6 +4334,643 @@ export default function App() {
             >
               Ver en Historial & Calendario
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: SUSTITUCIÓN DE EJERCICIO EN CALIENTE (MÁQUINA OCUPADA)
+          ========================================================================== */}
+      {substituteExerciseModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header del Modal */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-white truncate">Sustituir Ejercicio</h3>
+                  <span className="text-[11px] text-slate-400">
+                    Cambiar <strong className="text-cyan-400">{substituteExerciseModal.currentExercise.name}</strong> ({substituteExerciseModal.currentExercise.muscle})
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSubstituteExerciseModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Aviso inteligente de máquina ocupada */}
+            <div className="p-3 bg-cyan-950/20 border-b border-cyan-500/20 px-4 text-xs text-cyan-300 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>
+                Elige otra alternativa para <strong className="capitalize">{substituteExerciseModal.currentExercise.muscle}</strong> si el equipo está ocupado.
+              </span>
+            </div>
+
+            {/* Buscador y Filtros por Equipamiento */}
+            <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/40">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar ejercicio alternativo..."
+                  value={substituteSearchQuery}
+                  onChange={(e) => setSubstituteSearchQuery(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 text-white pl-9 pr-3 py-2 rounded-xl text-xs placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Filtro de Equipamiento */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[11px]">
+                {['todos', 'mancuerna', 'barra', 'polea', 'maquina', 'smith', 'corporal'].map((eq) => (
+                  <button
+                    key={eq}
+                    onClick={() => setSubstituteFilterEquipment(eq)}
+                    className={`px-2.5 py-1 rounded-lg font-bold capitalize whitespace-nowrap border transition ${
+                      substituteFilterEquipment === eq
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {eq === 'todos' ? 'Todos' : eq}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lista de Ejercicios Alternativos */}
+            <div className="p-3 overflow-y-auto space-y-1.5 flex-1 divide-y divide-slate-800/40">
+              {(() => {
+                const currentEx = substituteExerciseModal.currentExercise;
+                const existingWorkoutExIds = new Set(activeWorkout?.exercises.map((e) => e.exerciseId) || []);
+                const alternatives = exercises.filter((ex) => {
+                  const isSameMuscle = ex.muscle === currentEx.muscle;
+                  const isNotCurrent = ex.id !== currentEx.id;
+                  const notInWorkout = !existingWorkoutExIds.has(ex.id);
+                  const matchesSearch = ex.name.toLowerCase().includes(substituteSearchQuery.toLowerCase());
+                  const matchesEq = substituteFilterEquipment === 'todos' || ex.equipment === substituteFilterEquipment;
+                  return isSameMuscle && isNotCurrent && notInWorkout && matchesSearch && matchesEq;
+                });
+
+                if (alternatives.length === 0) {
+                  return (
+                    <div className="text-center py-8 px-4 text-xs text-slate-500">
+                      No se encontraron ejercicios alternativos con los filtros seleccionados.
+                    </div>
+                  );
+                }
+
+                return alternatives.map((alt) => {
+                  const badge = getEquipmentBadge(alt.equipment);
+                  const prevSets = getPreviousExerciseSets(alt.id);
+                  const bestPrev = prevSets.length > 0 ? prevSets[0] : null;
+
+                  return (
+                    <button
+                      key={alt.id}
+                      onClick={() => handleApplySubstituteExercise(alt.id)}
+                      className="w-full p-2.5 rounded-xl hover:bg-slate-800/70 border border-transparent hover:border-slate-700 transition flex items-center justify-between text-left group active:scale-[0.99]"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <span className="text-xs sm:text-sm font-bold text-white block truncate group-hover:text-cyan-400 transition-colors">
+                          {alt.name}
+                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                          {bestPrev ? (
+                            <span className="text-[10px] text-emerald-400 font-mono-numbers">
+                              Marca previa: {bestPrev.weight} {settings.unit} × {bestPrev.reps}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-500">Sin registros previos</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <span className="text-[11px] font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg shrink-0">
+                        Elegir
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-slate-800 bg-slate-900 text-center">
+              <button
+                onClick={() => setSubstituteExerciseModal(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: WIZARD GENERADOR AUTOMÁTICO DE RUTINAS INTELIGENTES (4 PASOS)
+          ========================================================================== */}
+      {showWizardModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header del Asistente */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <Wand2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <span>Generador Inteligente de Rutinas</span>
+                  </h3>
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                    {wizardStep <= 4 ? `Paso ${wizardStep} de 4` : 'Vista Previa del Plan'}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowWizardModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Barra de Progreso de Pasos */}
+            <div className="w-full bg-slate-950 h-1.5">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-300"
+                style={{ width: `${(wizardStep / 5) * 100}%` }}
+              ></div>
+            </div>
+
+            {/* Cuerpo del Asistente por Pasos */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+              {/* PASO 1: DÍAS A LA SEMANA */}
+              {wizardStep === 1 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Paso 1</span>
+                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuántos días vas a entrenar a la semana?</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      El algoritmo diseñará la división óptima (Full Body, Torso/Pierna o PPL) según tu disponibilidad semanal.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    {[
+                      {
+                        days: 2,
+                        title: '2 Días / Semana',
+                        split: 'Full Body (2x)',
+                        desc: 'Ideal para agendas ocupadas o deportistas con otras disciplinas.',
+                        badge: 'Mantenimiento & Fuerza',
+                      },
+                      {
+                        days: 3,
+                        title: '3 Días / Semana',
+                        split: 'Full Body (3x)',
+                        desc: 'Clásico de fuerza global con máxima recuperación entre sesiones.',
+                        badge: 'Alta Eficiencia',
+                      },
+                      {
+                        days: 4,
+                        title: '4 Días / Semana',
+                        split: 'Torso / Pierna',
+                        desc: 'La división más equilibrada para hipertrofia y progresión lineal.',
+                        badge: 'Recomendado',
+                      },
+                      {
+                        days: 5,
+                        title: '5 Días / Semana',
+                        split: 'PPL + Torso/Pierna',
+                        desc: 'Foco en empuje, tirón y pierna con sesiones accesorias.',
+                        badge: 'Volumen Alto',
+                      },
+                      {
+                        days: 6,
+                        title: '6 Días / Semana',
+                        split: 'Push / Pull / Legs (2x)',
+                        desc: 'Alta frecuencia y máximo volumen para atletas avanzados.',
+                        badge: 'Máximo Estímulo',
+                      },
+                    ].map((item) => {
+                      const isSelected = wizardConfig.days === item.days;
+                      return (
+                        <button
+                          key={item.days}
+                          type="button"
+                          onClick={() => setWizardConfig((p) => ({ ...p, days: item.days as WizardDays }))}
+                          className={`p-3.5 rounded-2xl border text-left transition-all active:scale-[0.99] relative flex flex-col justify-between ${
+                            isSelected
+                              ? 'bg-emerald-950/40 border-emerald-500 text-white ring-1 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                              <span className="text-sm font-black text-white">{item.title}</span>
+                              <span
+                                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                  isSelected
+                                    ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                    : 'bg-slate-900 text-emerald-400 border-slate-800'
+                                }`}
+                              >
+                                {item.split}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 leading-relaxed">{item.desc}</p>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                            <span>{item.badge}</span>
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                isSelected ? 'border-emerald-400 bg-emerald-500 text-slate-950' : 'border-slate-700'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PASO 2: EQUIPAMIENTO DISPONIBLE */}
+              {wizardStep === 2 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-black uppercase tracking-wider text-cyan-400">Paso 2</span>
+                    <h4 className="text-lg font-black text-white mt-0.5">¿Qué equipamiento tienes disponible?</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Filtramos estrictamente los 126 ejercicios para asignar solo los que puedes realizar.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {[
+                      {
+                        key: 'gimnasio_completo' as WizardEquipment,
+                        icon: Dumbbell,
+                        title: 'Gimnasio Comercial Completo',
+                        desc: 'Barras olímpicas, mancuernas, poleas, multipower y máquinas guiadas.',
+                        badge: 'Acceso total a 126 ejercicios',
+                      },
+                      {
+                        key: 'solo_mancuernas' as WizardEquipment,
+                        icon: Target,
+                        title: 'Solo Mancuernas & Peso Corporal',
+                        desc: 'Mancuernas ajustables o fijas y peso corporal. Perfecto para home gym o garaje.',
+                        badge: 'Mancuernas + Corporal',
+                      },
+                      {
+                        key: 'peso_corporal' as WizardEquipment,
+                        icon: Activity,
+                        title: 'Peso Corporal / Calistenia en Casa',
+                        desc: 'Flexiones, fondos, sentadillas, dominadas y trabajo con tu propio peso sin aparatos.',
+                        badge: 'Sin material pesado',
+                      },
+                    ].map((item) => {
+                      const isSelected = wizardConfig.equipment === item.key;
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setWizardConfig((p) => ({ ...p, equipment: item.key }))}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-cyan-950/40 border-cyan-500 text-white ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3.5">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                                isSelected
+                                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                                  : 'bg-slate-900 text-cyan-400 border-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-extrabold text-white">{item.title}</span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                              <span className="inline-block mt-2 text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                                {item.badge}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                              isSelected ? 'border-cyan-400 bg-cyan-500 text-slate-950' : 'border-slate-700'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PASO 3: OBJETIVO PRINCIPAL */}
+              {wizardStep === 3 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">Paso 3</span>
+                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuál es tu objetivo prioritario?</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Ajusta los rangos de repeticiones y la selección de compuestos y accesorios.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {[
+                      {
+                        key: 'hipertrofia' as WizardGoal,
+                        icon: Flame,
+                        title: 'Hipertrofia & Ganancia Muscular',
+                        desc: 'Rango de 8-12 repeticiones. Foco en tensión mecánica, congestión y crecimiento muscular.',
+                        badge: 'Reps: 8 - 12 • Descanso: 90s',
+                      },
+                      {
+                        key: 'fuerza' as WizardGoal,
+                        icon: Zap,
+                        title: 'Fuerza Máxima & Cargas Pesadas',
+                        desc: 'Rango de 4-6 repeticiones. Prioridad en levantamientos básicos pesados y reclutamiento neural.',
+                        badge: 'Reps: 4 - 6 • Descanso: 120s',
+                      },
+                      {
+                        key: 'acondicionamiento' as WizardGoal,
+                        icon: Sparkles,
+                        title: 'Acondicionamiento & Quema Calórica',
+                        desc: 'Rango de 12-15 repeticiones. Mayor densidad, descansos dinámicos y resistencia muscular.',
+                        badge: 'Reps: 12 - 15 • Descanso: 60s',
+                      },
+                    ].map((item) => {
+                      const isSelected = wizardConfig.goal === item.key;
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setWizardConfig((p) => ({ ...p, goal: item.key }))}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-amber-950/40 border-amber-500 text-white ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3.5">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                                isSelected
+                                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                                  : 'bg-slate-900 text-amber-400 border-slate-800'
+                              }`}
+                            >
+                              <Icon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <span className="text-sm font-extrabold text-white block">{item.title}</span>
+                              <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                              <span className="inline-block mt-2 text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                {item.badge}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                              isSelected ? 'border-amber-400 bg-amber-500 text-slate-950' : 'border-slate-700'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PASO 4: NIVEL DE EXPERIENCIA */}
+              {wizardStep === 4 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">Paso 4</span>
+                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuál es tu nivel de experiencia?</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Calibra el número de series base y la complejidad de los movimientos en cada rutina.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {[
+                      {
+                        key: 'principiante' as WizardLevel,
+                        title: 'Principiante (< 1 año)',
+                        desc: '3 series base por ejercicio. Enfoque en dominar la técnica y crear consistencia.',
+                        badge: '3 series base • Progresión gradual',
+                      },
+                      {
+                        key: 'intermedio' as WizardLevel,
+                        title: 'Intermedio (1 a 3 años)',
+                        desc: '3 a 4 series base. Balance óptimo de sobrecarga progresiva y recuperación.',
+                        badge: '3-4 series • Sobrecarga lineal',
+                      },
+                      {
+                        key: 'avanzado' as WizardLevel,
+                        title: 'Avanzado (> 3 años)',
+                        desc: '4 series efectivas con máxima intensidad y variedad de estímulos.',
+                        badge: '4 series • Alto volumen',
+                      },
+                    ].map((item) => {
+                      const isSelected = wizardConfig.level === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setWizardConfig((p) => ({ ...p, level: item.key }))}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-purple-950/40 border-purple-500 text-white ring-1 ring-purple-500/30 shadow-lg shadow-purple-500/10'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div>
+                            <span className="text-sm font-extrabold text-white block">{item.title}</span>
+                            <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                            <span className="inline-block mt-2 text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                              {item.badge}
+                            </span>
+                          </div>
+
+                          <div
+                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                              isSelected ? 'border-purple-400 bg-purple-500 text-slate-950' : 'border-slate-700'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PASO 5: VISTA PREVIA Y CONFIRMACIÓN */}
+              {wizardStep === 5 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Resumen</span>
+                    <h4 className="text-lg font-black text-white mt-0.5">¡Tu programa inteligente está listo!</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Hemos generado {generateIntelligentRoutines(wizardConfig, exercises).length} rutinas personalizadas adaptadas a tus parámetros.
+                    </p>
+                  </div>
+
+                  {/* Resumen de Configuración */}
+                  <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                      {wizardConfig.days} Días / Semana
+                    </span>
+                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                      {wizardConfig.equipment.replace('_', ' ')}
+                    </span>
+                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                      {wizardConfig.goal}
+                    </span>
+                    <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                      {wizardConfig.level}
+                    </span>
+                  </div>
+
+                  {/* Lista Previa de Rutinas Generadas */}
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                    {generateIntelligentRoutines(wizardConfig, exercises).map((rot, idx) => {
+                      const dayStyle = getDayBadgeStyle(rot.dayOfWeek);
+                      const dayLabel = getDayLabel(rot.dayOfWeek);
+                      return (
+                        <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-white flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              {rot.title}
+                            </span>
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${dayStyle.bg} ${dayStyle.text} ${dayStyle.border}`}>
+                              {dayLabel}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 pl-7 space-y-0.5">
+                            {rot.exerciseIds.map((exId, exi) => {
+                              const ex = exercises.find((e) => e.id === exId);
+                              return (
+                                <div key={exi} className="truncate">
+                                  • {ex?.name || 'Ejercicio'} <span className="text-slate-600">({ex?.equipment})</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selector: Reemplazar o Añadir */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                    <span className="font-bold text-slate-300 block">¿Cómo deseas aplicar este plan?</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWizardReplaceMode('replace')}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition ${
+                          wizardReplaceMode === 'replace'
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800'
+                        }`}
+                      >
+                        Reemplazar rutinas actuales
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWizardReplaceMode('append')}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition ${
+                          wizardReplaceMode === 'append'
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800'
+                        }`}
+                      >
+                        Añadir a las existentes
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer de Navegación del Wizard */}
+            <div className="p-4 border-t border-slate-800 bg-slate-900 flex items-center justify-between gap-3">
+              {wizardStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setWizardStep((p) => (p - 1) as any)}
+                  className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs active:scale-95 transition"
+                >
+                  Atrás
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowWizardModal(false)}
+                  className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs active:scale-95 transition"
+                >
+                  Cancelar
+                </button>
+              )}
+
+              {wizardStep < 5 ? (
+                <button
+                  type="button"
+                  onClick={() => setWizardStep((p) => (p + 1) as any)}
+                  className="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-1.5"
+                >
+                  <span>Siguiente</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleApplyGeneratedRoutines}
+                  className="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-emerald-500/25 active:scale-95 transition flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Aplicar Plan de Entrenamiento</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
