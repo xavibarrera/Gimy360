@@ -6,6 +6,8 @@
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     overscroll-behavior-y: contain;
+    background-color: #020617;
+    color: #f8fafc;
   }
 
   input, textarea {
@@ -40,4 +42,132 @@
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* ==========================================================================
+   MODO CLARO (LIGHT THEME) OVERRIDES
+   ========================================================================== */
+[data-theme="light"],
+.theme-light {
+  color-scheme: light;
+}
+
+[data-theme="light"] body,
+body:has([data-theme="light"]) {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Backgrounds in Light Mode */
+[data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-950\/80,
+[data-theme="light"] .bg-slate-950\/90,
+[data-theme="light"] .bg-slate-950\/95 {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="light"] .bg-slate-900,
+[data-theme="light"] .bg-slate-900\/90,
+[data-theme="light"] .bg-slate-900\/80,
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/50 {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .bg-slate-850,
+[data-theme="light"] .bg-slate-800\/80,
+[data-theme="light"] .bg-slate-800\/90 {
+  background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .hover\:bg-slate-800:hover {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Borders in Light Mode */
+[data-theme="light"] .border-slate-800,
+[data-theme="light"] .border-slate-800\/90,
+[data-theme="light"] .border-slate-800\/80,
+[data-theme="light"] .border-slate-700,
+[data-theme="light"] .border-slate-700\/80,
+[data-theme="light"] .border-slate-700\/50 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Text Colors in Light Mode */
+[data-theme="light"] .text-white {
+  color: #0f172a !important;
+}
+[data-theme="light"] .text-slate-100 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .text-slate-200 {
+  color: #1e293b !important;
+}
+[data-theme="light"] .text-slate-300 {
+  color: #334155 !important;
+}
+[data-theme="light"] .text-slate-400 {
+  color: #475569 !important;
+}
+[data-theme="light"] .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Ensure buttons with solid emerald background have dark crisp text */
+[data-theme="light"] .bg-emerald-500,
+[data-theme="light"] .bg-emerald-400 {
+  color: #020617 !important;
+}
+[data-theme="light"] .bg-emerald-500 .text-slate-950,
+[data-theme="light"] .bg-emerald-500 span,
+[data-theme="light"] .bg-emerald-500 svg {
+  color: #020617 !important;
+}
+
+/* Header and Navigation sticky elements */
+[data-theme="light"] header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] nav {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+/* Inputs, Selects, Textareas */
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Modals with backdrop */
+[data-theme="light"] .bg-slate-950\/80,
+[data-theme="light"] .bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.6) !important;
 }

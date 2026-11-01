@@ -37,7 +37,14 @@ import {
   Maximize2,
   Minimize2,
   Copy,
-  ChevronDown
+  ChevronDown,
+  Eye,
+  AlertTriangle,
+  Pencil,
+  ArrowLeft,
+  Sun,
+  Moon,
+  Target
 } from 'lucide-react';
 
 /* ==========================================================================
@@ -47,6 +54,19 @@ import {
 export type Equipment = 'barra' | 'mancuerna' | 'polea' | 'smith' | 'maquina' | 'corporal';
 
 export type MuscleGroup = 'pecho' | 'espalda' | 'piernas' | 'hombro' | 'brazos' | 'core';
+
+export type DayOfWeek = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo' | 'ninguno';
+
+export const DAYS_OF_WEEK: { key: DayOfWeek; label: string; short: string; order: number }[] = [
+  { key: 'lunes', label: 'Lunes', short: 'LUN', order: 1 },
+  { key: 'martes', label: 'Martes', short: 'MAR', order: 2 },
+  { key: 'miercoles', label: 'Miércoles', short: 'MIÉ', order: 3 },
+  { key: 'jueves', label: 'Jueves', short: 'JUE', order: 4 },
+  { key: 'viernes', label: 'Viernes', short: 'VIE', order: 5 },
+  { key: 'sabado', label: 'Sábado', short: 'SÁB', order: 6 },
+  { key: 'domingo', label: 'Domingo', short: 'DOM', order: 7 },
+  { key: 'ninguno', label: 'Sin día fijo', short: '—', order: 8 },
+];
 
 export type SetType = 'N' | 'W' | 'F' | 'D'; // Normal, Warmup (Calentamiento), Failure (Fallo), Drop-set
 
@@ -92,6 +112,7 @@ export interface Routine {
   category: string;
   description: string;
   exerciseIds: string[];
+  dayOfWeek?: DayOfWeek;
   isCustom?: boolean;
 }
 
@@ -100,6 +121,7 @@ export interface AppSettings {
   defaultRestTime: number; // segundos
   soundEnabled: boolean;
   vibrateEnabled: boolean;
+  theme?: 'dark' | 'light';
 }
 
 /* ==========================================================================
@@ -163,6 +185,7 @@ const INITIAL_ROUTINES: Routine[] = [
     category: 'Fuerza e Hipertrofia',
     description: 'Enfocado en pectoral mayor, deltoides anterior/lateral y tríceps.',
     exerciseIds: ['ex-1', 'ex-2', 'ex-22', 'ex-30', 'ex-5'],
+    dayOfWeek: 'lunes',
   },
   {
     id: 'rot-2',
@@ -170,6 +193,7 @@ const INITIAL_ROUTINES: Routine[] = [
     category: 'Densidad y Amplitud',
     description: 'Trabajo completo de dorsales, trapecios, romboides y bíceps.',
     exerciseIds: ['ex-8', 'ex-7', 'ex-9', 'ex-24', 'ex-27'],
+    dayOfWeek: 'miercoles',
   },
   {
     id: 'rot-3',
@@ -177,6 +201,7 @@ const INITIAL_ROUTINES: Routine[] = [
     category: 'Cadena Anterior y Posterior',
     description: 'Cuádriceps, femorales, glúteos y gemelos con cargas progresivas.',
     exerciseIds: ['ex-14', 'ex-15', 'ex-17', 'ex-19', 'ex-20'],
+    dayOfWeek: 'viernes',
   },
   {
     id: 'rot-4',
@@ -184,12 +209,39 @@ const INITIAL_ROUTINES: Routine[] = [
     category: 'Cuerpo Completo',
     description: 'Sesión integral multiarticular de alta intensidad para todo el cuerpo.',
     exerciseIds: ['ex-1', 'ex-14', 'ex-7', 'ex-21', 'ex-33'],
+    dayOfWeek: 'sabado',
   },
 ];
 
 /* ==========================================================================
    UTILIDADES & HELPERS
    ========================================================================== */
+
+export function getDayLabel(day?: DayOfWeek): string {
+  const found = DAYS_OF_WEEK.find((d) => d.key === day);
+  return found ? found.label : 'Sin día fijo';
+}
+
+export function getDayBadgeStyle(day?: DayOfWeek): { bg: string; text: string; border: string } {
+  switch (day) {
+    case 'lunes':
+      return { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30' };
+    case 'martes':
+      return { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30' };
+    case 'miercoles':
+      return { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' };
+    case 'jueves':
+      return { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' };
+    case 'viernes':
+      return { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' };
+    case 'sabado':
+      return { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30' };
+    case 'domingo':
+      return { bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/30' };
+    default:
+      return { bg: 'bg-slate-800', text: 'text-slate-400', border: 'border-slate-700' };
+  }
+}
 
 // Estimación de 1RM con la fórmula de Epley
 export function calculate1RM(weight: number, reps: number): number {
@@ -198,6 +250,39 @@ export function calculate1RM(weight: number, reps: number): number {
   // Fórmula Epley: Peso * (1 + reps / 30)
   const oneRM = weight * (1 + reps / 30);
   return Math.round(oneRM * 10) / 10;
+}
+
+// Icono y estilo visual según la categoría o enfoque de la rutina
+export function getRoutineCategoryMeta(category?: string, title?: string): {
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+  border: string;
+  label: string;
+} {
+  const text = `${category || ''} ${title || ''}`.toLowerCase();
+  if (text.includes('empuje') || text.includes('push')) {
+    return { icon: Flame, color: 'text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/30', label: 'Empuje' };
+  }
+  if (text.includes('tirón') || text.includes('tiron') || text.includes('pull') || text.includes('jalón') || text.includes('jalon') || text.includes('espalda')) {
+    return { icon: Zap, color: 'text-cyan-400', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30', label: 'Tirón' };
+  }
+  if (text.includes('pierna') || text.includes('leg') || text.includes('fuerza') || text.includes('glúteo') || text.includes('gluteo') || text.includes('cuádriceps')) {
+    return { icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', label: 'Pierna' };
+  }
+  if (text.includes('full body') || text.includes('cuerpo completo') || text.includes('acelera') || text.includes('híbrido')) {
+    return { icon: Sparkles, color: 'text-yellow-400', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30', label: 'Full Body' };
+  }
+  if (text.includes('torso') || text.includes('superior')) {
+    return { icon: Layers, color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30', label: 'Torso' };
+  }
+  if (text.includes('brazo') || text.includes('biceps') || text.includes('bíceps') || text.includes('triceps') || text.includes('tríceps')) {
+    return { icon: Dumbbell, color: 'text-blue-400', bg: 'bg-blue-500/15', border: 'border-blue-500/30', label: 'Brazos' };
+  }
+  if (text.includes('core') || text.includes('abdomen') || text.includes('abdominal')) {
+    return { icon: Target, color: 'text-rose-400', bg: 'bg-rose-500/15', border: 'border-rose-500/30', label: 'Core' };
+  }
+  return { icon: Layers, color: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', label: 'Rutina' };
 }
 
 // Generador de sonido con Web Audio API (100% offline, sin archivos externos)
@@ -388,17 +473,30 @@ export default function App() {
     }
   });
 
-  // Ajustes de la App
+  // Ajustes de la App (Modo Oscuro por defecto)
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('gimy360_settings');
-    return saved
-      ? JSON.parse(saved)
-      : {
-          unit: 'kg',
-          defaultRestTime: 90,
-          soundEnabled: true,
-          vibrateEnabled: true,
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          unit: parsed.unit || 'kg',
+          defaultRestTime: parsed.defaultRestTime || 90,
+          soundEnabled: parsed.soundEnabled ?? true,
+          vibrateEnabled: parsed.vibrateEnabled ?? true,
+          theme: parsed.theme || 'dark',
         };
+      } catch {
+        // Fallback si el json guardado estuviera corrupto
+      }
+    }
+    return {
+      unit: 'kg',
+      defaultRestTime: 90,
+      soundEnabled: true,
+      vibrateEnabled: true,
+      theme: 'dark',
+    };
   });
 
   // Sesión de entrenamiento activa (si hay una en curso)
@@ -435,8 +533,12 @@ export default function App() {
   // Modales y estados de vista
   const [showAddExerciseModal, setShowAddExerciseModal] = useState<boolean>(false);
   const [showCreateExerciseModal, setShowCreateExerciseModal] = useState<boolean>(false);
-  const [showCreateRoutineModal, setShowCreateRoutineModal] = useState<boolean>(false);
+  const [isRoutineEditorOpen, setIsRoutineEditorOpen] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<WorkoutSession | null>(null);
+  const [selectedRoutineDetail, setSelectedRoutineDetail] = useState<Routine | null>(null);
+  const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null);
+  const [showCancelWorkoutModal, setShowCancelWorkoutModal] = useState<boolean>(false);
+  const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
 
   // Filtros de ejercicios
   const [searchExerciseQuery, setSearchExerciseQuery] = useState<string>('');
@@ -492,6 +594,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('gimy360_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Sincronización del tema visual (Dark / Light) en el elemento raíz
+  useEffect(() => {
+    const currentTheme = settings.theme || 'dark';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    if (currentTheme === 'light') {
+      document.documentElement.classList.add('theme-light');
+      document.documentElement.classList.remove('theme-dark');
+    } else {
+      document.documentElement.classList.add('theme-dark');
+      document.documentElement.classList.remove('theme-light');
+    }
+  }, [settings.theme]);
 
   useEffect(() => {
     if (activeWorkout) {
@@ -615,17 +730,17 @@ export default function App() {
       const lastSessionSets = getPreviousExerciseSets(exId);
       const defaultSets: WorkoutSet[] =
         lastSessionSets.length > 0
-          ? lastSessionSets.map((s, sIdx) => ({
-              id: `set-${idx}-${sIdx}-${Date.now()}`,
-              type: s.type || 'N',
-              weight: s.weight,
-              reps: s.reps,
-              completed: false,
-            }))
+          ? [
+              {
+                id: `set-${idx}-0-${Date.now()}`,
+                type: lastSessionSets[0].type || 'N',
+                weight: lastSessionSets[0].weight,
+                reps: lastSessionSets[0].reps,
+                completed: false,
+              },
+            ]
           : [
-              { id: `set-${idx}-1-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
-              { id: `set-${idx}-2-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
-              { id: `set-${idx}-3-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
+              { id: `set-${idx}-0-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
             ];
 
       return {
@@ -661,23 +776,23 @@ export default function App() {
     return [];
   }
 
-  // Añadir ejercicio al entreno activo
+  // Añadir ejercicio al entreno activo (con solo 1 serie inicial)
   const handleAddExerciseToWorkout = (exerciseId: string) => {
     if (!activeWorkout) return;
     const lastSessionSets = getPreviousExerciseSets(exerciseId);
     const initialSets: WorkoutSet[] =
       lastSessionSets.length > 0
-        ? lastSessionSets.map((s, i) => ({
-            id: `set-${Date.now()}-${i}`,
-            type: s.type || 'N',
-            weight: s.weight,
-            reps: s.reps,
-            completed: false,
-          }))
+        ? [
+            {
+              id: `set-${Date.now()}-0`,
+              type: lastSessionSets[0].type || 'N',
+              weight: lastSessionSets[0].weight,
+              reps: lastSessionSets[0].reps,
+              completed: false,
+            },
+          ]
         : [
-            { id: `set-${Date.now()}-1`, type: 'N', weight: 0, reps: 0, completed: false },
-            { id: `set-${Date.now()}-2`, type: 'N', weight: 0, reps: 0, completed: false },
-            { id: `set-${Date.now()}-3`, type: 'N', weight: 0, reps: 0, completed: false },
+            { id: `set-${Date.now()}-0`, type: 'N', weight: 0, reps: 0, completed: false },
           ];
 
     const newExercise: WorkoutExercise = {
@@ -764,12 +879,9 @@ export default function App() {
     setActiveWorkout({ ...activeWorkout, exercises: updatedExercises });
   };
 
-  // Cancelar entreno
+  // Cancelar entreno (Abre modal nativo de la app para evitar fallos de window.confirm)
   const handleCancelWorkout = () => {
-    if (window.confirm('¿Seguro que deseas cancelar este entrenamiento? No se guardará el progreso actual.')) {
-      setActiveWorkout(null);
-      setRestTimer((p) => ({ ...p, isActive: false, remaining: 0 }));
-    }
+    setShowCancelWorkoutModal(true);
   };
 
   // Finalizar y Guardar Entrenamiento
@@ -788,10 +900,7 @@ export default function App() {
       .filter((ex) => ex.sets.length > 0);
 
     if (cleanedExercises.length === 0) {
-      if (!window.confirm('No has marcado ninguna serie como completada. ¿Deseas finalizar y descartar el entrenamiento?')) {
-        return;
-      }
-      setActiveWorkout(null);
+      setShowCancelWorkoutModal(true);
       return;
     }
 
@@ -838,42 +947,142 @@ export default function App() {
     };
 
     setExercises((prev) => [newEx, ...prev]);
+    // Si el editor de rutinas está abierto, auto-seleccionar el ejercicio recién creado
+    if (isRoutineEditorOpen) {
+      setSelectedExIdsForRoutine((prev) => [...prev, newEx.id]);
+    }
     setNewExName('');
     setShowCreateExerciseModal(false);
   };
 
   /* ==========================================================================
-     CREACIÓN DE RUTINA PERSONALIZADA
+     GESTIÓN Y EDICIÓN DE RUTINA EN VISTA COMPLETA (NO POPUP)
      ========================================================================== */
 
   const [newRotTitle, setNewRotTitle] = useState('');
   const [newRotCategory, setNewRotCategory] = useState('');
   const [newRotDesc, setNewRotDesc] = useState('');
+  const [newRotDayOfWeek, setNewRotDayOfWeek] = useState<DayOfWeek>('ninguno');
+  const [newRotMuscleFilter, setNewRotMuscleFilter] = useState<string>('todos');
+  const [newRotSearchQuery, setNewRotSearchQuery] = useState<string>('');
   const [selectedExIdsForRoutine, setSelectedExIdsForRoutine] = useState<string[]>([]);
 
-  const handleCreateCustomRoutine = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRotTitle.trim() || selectedExIdsForRoutine.length === 0) {
-      alert('Por favor ingresa un título y selecciona al menos 1 ejercicio');
-      return;
-    }
-
-    const newRot: Routine = {
-      id: 'routine-' + Date.now(),
-      title: newRotTitle.trim(),
-      category: newRotCategory.trim() || 'Personalizada',
-      description: newRotDesc.trim() || 'Rutina creada a medida',
-      exerciseIds: selectedExIdsForRoutine,
-      isCustom: true,
-    };
-
-    setRoutines((prev) => [...prev, newRot]);
+  const openCreateRoutineModal = () => {
+    setEditingRoutine(null);
     setNewRotTitle('');
     setNewRotCategory('');
     setNewRotDesc('');
+    setNewRotDayOfWeek('ninguno');
+    setNewRotMuscleFilter('todos');
+    setNewRotSearchQuery('');
     setSelectedExIdsForRoutine([]);
-    setShowCreateRoutineModal(false);
+    setIsRoutineEditorOpen(true);
+    setActiveTab('rutinas');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const openEditRoutineModal = (routine: Routine) => {
+    setEditingRoutine(routine);
+    setNewRotTitle(routine.title);
+    setNewRotCategory(routine.category);
+    setNewRotDesc(routine.description);
+    setNewRotDayOfWeek(routine.dayOfWeek || 'ninguno');
+    setNewRotMuscleFilter('todos');
+    setNewRotSearchQuery('');
+    setSelectedExIdsForRoutine([...routine.exerciseIds]);
+    setIsRoutineEditorOpen(true);
+    setActiveTab('rutinas');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeRoutineEditor = () => {
+    setIsRoutineEditorOpen(false);
+    setEditingRoutine(null);
+  };
+
+  const handleSaveRoutine = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRotTitle.trim() || selectedExIdsForRoutine.length === 0) {
+      return;
+    }
+
+    if (editingRoutine) {
+      // Modificar rutina existente (añadir/quitar ejercicios, día, etc.)
+      const updatedRoutine: Routine = {
+        ...editingRoutine,
+        title: newRotTitle.trim(),
+        category: newRotCategory.trim() || 'Personalizada',
+        description: newRotDesc.trim() || 'Rutina personalizada',
+        exerciseIds: selectedExIdsForRoutine,
+        dayOfWeek: newRotDayOfWeek,
+      };
+
+      setRoutines((prev) =>
+        prev.map((r) => (r.id === editingRoutine.id ? updatedRoutine : r))
+      );
+
+      // Si el modal de detalle de esta rutina está abierto, actualizarlo también
+      if (selectedRoutineDetail?.id === editingRoutine.id) {
+        setSelectedRoutineDetail(updatedRoutine);
+      }
+    } else {
+      // Crear nueva rutina
+      const newRot: Routine = {
+        id: 'routine-' + Date.now(),
+        title: newRotTitle.trim(),
+        category: newRotCategory.trim() || 'Personalizada',
+        description: newRotDesc.trim() || 'Rutina creada a medida',
+        exerciseIds: selectedExIdsForRoutine,
+        dayOfWeek: newRotDayOfWeek,
+        isCustom: true,
+      };
+
+      setRoutines((prev) => [...prev, newRot]);
+    }
+
+    setNewRotTitle('');
+    setNewRotCategory('');
+    setNewRotDesc('');
+    setNewRotDayOfWeek('ninguno');
+    setNewRotMuscleFilter('todos');
+    setNewRotSearchQuery('');
+    setSelectedExIdsForRoutine([]);
+    setEditingRoutine(null);
+    setIsRoutineEditorOpen(false);
+  };
+
+  // Eliminar rutina
+  const handleDeleteRoutine = (routineId: string) => {
+    setRoutines((prev) => prev.filter((r) => r.id !== routineId));
+    if (selectedRoutineDetail?.id === routineId) {
+      setSelectedRoutineDetail(null);
+    }
+    setRoutineToDelete(null);
+  };
+
+  // Rutinas ordenadas por día de la semana (Lunes a Domingo, y luego sin día) y alfabéticamente
+  const sortedRoutines = useMemo(() => {
+    const getOrder = (day?: DayOfWeek) => {
+      switch (day) {
+        case 'lunes': return 1;
+        case 'martes': return 2;
+        case 'miercoles': return 3;
+        case 'jueves': return 4;
+        case 'viernes': return 5;
+        case 'sabado': return 6;
+        case 'domingo': return 7;
+        default: return 8;
+      }
+    };
+    return [...routines].sort((a, b) => {
+      const orderA = getOrder(a.dayOfWeek);
+      const orderB = getOrder(b.dayOfWeek);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [routines]);
 
   /* ==========================================================================
      CÁLCULO DE VOLUMEN Y RÉCORDS PERSONALES (PRs)
@@ -1076,7 +1285,12 @@ export default function App() {
   }, [exercises, searchExerciseQuery, selectedMuscleFilter]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
+    <div
+      data-theme={settings.theme || 'dark'}
+      className={`min-h-screen ${
+        settings.theme === 'light' ? 'theme-light bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'
+      } flex flex-col font-sans select-none antialiased`}
+    >
       {/* ==========================================================================
           BARRA SUPERIOR (HEADER)
           ========================================================================== */}
@@ -1108,17 +1322,6 @@ export default function App() {
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         )}
-
-        {/* Botón rápido de iniciar entreno libre si no hay entreno activo */}
-        {!activeWorkout && (
-          <button
-            onClick={handleStartFreeWorkout}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded-full shadow-md shadow-emerald-500/20 active:scale-95 transition"
-          >
-            <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>Libre</span>
-          </button>
-        )}
       </header>
 
       {/* ==========================================================================
@@ -1129,61 +1332,435 @@ export default function App() {
             PESTAÑA 1: RUTINAS Y SELECCIÓN DE ENTRENO
             ================================================================== */}
         {activeTab === 'rutinas' && (
-          <div className="space-y-5 animate-in fade-in duration-200">
-            {/* Banner de Inicio Rápido */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/80 border border-slate-800 p-5 shadow-xl">
-              <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
-                    <Flame className="w-3.5 h-3.5" />
-                    Entrena a tu ritmo
+          isRoutineEditorOpen ? (
+            /* ==================================================================
+               VISTA COMPLETA: CREAR / EDITAR RUTINA (CON SCROLL NATIVO)
+               ================================================================== */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Barra de Navegación y Acciones Rápidas (Sticky) */}
+              <div className="sticky top-[53px] sm:top-[57px] z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2.5 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/90 flex items-center justify-between gap-2 shadow-sm">
+                <button
+                  type="button"
+                  onClick={closeRoutineEditor}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 px-3 py-2 rounded-xl active:scale-95 transition"
+                >
+                  <ArrowLeft className="w-4 h-4 text-emerald-400" />
+                  <span>Volver a Rutinas</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={closeRoutineEditor}
+                    className="text-xs text-slate-400 hover:text-slate-200 px-3 py-2 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveRoutine}
+                    disabled={!newRotTitle.trim() || selectedExIdsForRoutine.length === 0}
+                    className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl uppercase tracking-wider shadow-md shadow-emerald-500/20 active:scale-95 transition"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>{editingRoutine ? 'Guardar' : 'Crear'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Título de la Vista */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    {editingRoutine ? 'Modo Edición' : 'Nueva Rutina'}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {selectedExIdsForRoutine.length} {selectedExIdsForRoutine.length === 1 ? 'ejercicio seleccionado' : 'ejercicios seleccionados'}
+                  </span>
+                </div>
+                <h2 className="text-xl font-black text-white tracking-tight">
+                  {editingRoutine ? 'Editar Rutina' : 'Diseñar Nueva Rutina'}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {editingRoutine
+                    ? 'Añade o quita ejercicios, modifica el día asignado o ajusta el nombre y categoría.'
+                    : 'Configura el nombre, el día de la semana y selecciona los ejercicios que componen este entrenamiento.'}
+                </p>
+              </div>
+
+              {/* Formulario Principal */}
+              <form onSubmit={handleSaveRoutine} className="space-y-5">
+                {/* 1. Información Básica */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    1. Información Básica
+                  </h3>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                      Título de la Rutina <span className="text-emerald-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: Torso Hipertrofia B, Pierna & Glúteos..."
+                      value={newRotTitle}
+                      onChange={(e) => setNewRotTitle(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-sm font-semibold placeholder-slate-600 focus:outline-none transition"
+                    />
                   </div>
-                  <h2 className="text-xl font-black text-white tracking-tight">¿Listo para entrenar hoy?</h2>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                    Inicia un entrenamiento libre o elige tu rutina programada con registro automático de cargas.
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">Categoría / Enfoque</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Empuje / Fuerza / Hipertrofia"
+                        value={newRotCategory}
+                        onChange={(e) => setNewRotCategory(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-xs sm:text-sm placeholder-slate-600 focus:outline-none transition"
+                      />
+                      {/* Chips de sugerencias rápidas */}
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {['Empuje', 'Tirón', 'Pierna', 'Torso', 'Full Body', 'Brazos', 'Core'].map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setNewRotCategory(cat)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition ${
+                              newRotCategory.toLowerCase() === cat.toLowerCase()
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                                : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">Descripción o Notas</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: 4 ejercicios de fuerza y accesorios"
+                        value={newRotDesc}
+                        onChange={(e) => setNewRotDesc(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-xs sm:text-sm placeholder-slate-600 focus:outline-none transition"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Día de la Semana Asignado */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-emerald-400" />
+                      2. Asignar Día de la Semana
+                    </h3>
+                    <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      {getDayLabel(newRotDayOfWeek)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Las rutinas se ordenan por día de la semana para una navegación rápida e intuitiva.
                   </p>
+
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 pt-1">
+                    {DAYS_OF_WEEK.map((d) => {
+                      const isSelected = newRotDayOfWeek === d.key;
+                      return (
+                        <button
+                          key={d.key}
+                          type="button"
+                          onClick={() => setNewRotDayOfWeek(d.key)}
+                          className={`py-2 px-1 rounded-xl text-[11px] font-black uppercase transition-all active:scale-95 text-center border ${
+                            isSelected
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          <span className="block">{d.short}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Ejercicios Seleccionados Actualmente */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Dumbbell className="w-4 h-4 text-emerald-400" />
+                      3. Ejercicios Incluidos ({selectedExIdsForRoutine.length})
+                    </h3>
+                    {selectedExIdsForRoutine.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExIdsForRoutine([])}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 font-bold transition hover:underline"
+                      >
+                        Quitar todos
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedExIdsForRoutine.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                      No has seleccionado ejercicios todavía. Elige al menos uno del catálogo inferior.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {selectedExIdsForRoutine.map((exId, idx) => {
+                        const ex = exercises.find((e) => e.id === exId);
+                        if (!ex) return null;
+                        const badge = getEquipmentBadge(ex.equipment);
+
+                        return (
+                          <div
+                            key={exId}
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-white block truncate">{ex.name}</span>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                                    {badge.label}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 capitalize">{ex.muscle}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExIdsForRoutine((prev) => prev.filter((id) => id !== exId))}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-90 transition shrink-0"
+                              title="Quitar de la rutina"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Catálogo de Ejercicios */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-lg">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Search className="w-4 h-4 text-emerald-400" />
+                        4. Catálogo de Ejercicios
+                      </h3>
+                      <p className="text-xs text-slate-500">Toca cualquier ejercicio para seleccionarlo o deseleccionarlo</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateExerciseModal(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-slate-950 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl hover:bg-emerald-500/10 active:scale-95 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Crear Ejercicio</span>
+                    </button>
+                  </div>
+
+                  {/* Buscador de ejercicios */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre (ej: Press, Sentadilla, Curl...)"
+                      value={newRotSearchQuery}
+                      onChange={(e) => setNewRotSearchQuery(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 pl-10 pr-9 py-2.5 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                    />
+                    {newRotSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setNewRotSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white p-1"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filtro por grupo muscular */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                    {(['todos', 'pecho', 'espalda', 'piernas', 'hombro', 'brazos', 'core'] as const).map(
+                      (m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setNewRotMuscleFilter(m)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl uppercase whitespace-nowrap transition active:scale-95 ${
+                            newRotMuscleFilter === m
+                              ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {m === 'todos' ? 'Todos' : getMuscleBadge(m)}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  {/* Lista de ejercicios con scroll natural */}
+                  <div className="space-y-2 pt-1">
+                    {exercises
+                      .filter((ex) => {
+                        const matchesSearch = ex.name.toLowerCase().includes(newRotSearchQuery.toLowerCase());
+                        const matchesMuscle = newRotMuscleFilter === 'todos' || ex.muscle === newRotMuscleFilter;
+                        return matchesSearch && matchesMuscle;
+                      })
+                      .map((ex) => {
+                        const isSelected = selectedExIdsForRoutine.includes(ex.id);
+                        const badge = getEquipmentBadge(ex.equipment);
+
+                        return (
+                          <button
+                            type="button"
+                            key={ex.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedExIdsForRoutine(selectedExIdsForRoutine.filter((id) => id !== ex.id));
+                              } else {
+                                setSelectedExIdsForRoutine([...selectedExIdsForRoutine, ex.id]);
+                              }
+                            }}
+                            className={`w-full p-3.5 rounded-2xl border flex items-center justify-between text-left transition-all active:scale-[0.99] ${
+                              isSelected
+                                ? 'bg-emerald-950/40 border-emerald-500/80 text-white shadow-sm shadow-emerald-500/10'
+                                : 'bg-slate-950 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:bg-slate-900/60'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <span className="text-sm font-bold block truncate text-slate-100">{ex.name}</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                                <span className="text-xs text-slate-400 capitalize">{ex.muscle}</span>
+                              </div>
+                            </div>
+
+                            <div
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center border shrink-0 transition-colors ${
+                                isSelected
+                                  ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-md'
+                                  : 'border-slate-700 bg-slate-900'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* 5. Botones de Acción Final */}
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={closeRoutineEditor}
+                    className="w-full sm:w-1/3 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newRotTitle.trim() || selectedExIdsForRoutine.length === 0}
+                    className="w-full sm:w-2/3 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>
+                      {editingRoutine
+                        ? `Guardar Cambios (${selectedExIdsForRoutine.length} ejercicios)`
+                        : `Crear Rutina (${selectedExIdsForRoutine.length} ejercicios)`}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            /* ==================================================================
+               VISTA PRINCIPAL: LISTADO DE RUTINAS
+               ================================================================== */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Banner de Inicio Rápido */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/80 border border-slate-800 p-5 shadow-xl">
+                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                      <Flame className="w-3.5 h-3.5" />
+                      Entrena a tu ritmo
+                    </div>
+                    <h2 className="text-xl font-black text-white tracking-tight">¿Listo para entrenar hoy?</h2>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                      Inicia un entrenamiento libre o elige tu rutina programada con registro automático de cargas.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleStartFreeWorkout}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-3.5 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all text-sm uppercase tracking-wider"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>🚀 Iniciar Entreno Libre</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Cabecera de Rutinas con Botón Crear */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Tus Rutinas</h3>
+                  <p className="text-xs text-slate-500">{routines.length} esquemas listos para ejecutar</p>
                 </div>
                 <button
-                  onClick={handleStartFreeWorkout}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-3.5 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all text-sm uppercase tracking-wider"
+                  onClick={openCreateRoutineModal}
+                  className="flex items-center gap-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-2 rounded-xl border border-slate-700 active:scale-95 transition"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>🚀 Iniciar Entreno Libre</span>
+                  <Plus className="w-4 h-4" />
+                  <span>Crear Rutina</span>
                 </button>
               </div>
-            </div>
 
-            {/* Cabecera de Rutinas con Botón Crear */}
-            <div className="flex items-center justify-between pt-1">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Tus Rutinas</h3>
-                <p className="text-xs text-slate-500">{routines.length} esquemas listos para ejecutar</p>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectedExIdsForRoutine([]);
-                  setShowCreateRoutineModal(true);
-                }}
-                className="flex items-center gap-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-2 rounded-xl border border-slate-700 active:scale-95 transition"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Crear Rutina</span>
-              </button>
-            </div>
+              {/* Lista de Rutinas (Ordenadas por Día de la Semana y Alfabéticamente) */}
+              <div className="grid gap-3.5">
+                {sortedRoutines.map((routine) => {
+                  const dayStyle = getDayBadgeStyle(routine.dayOfWeek);
+                  const dayLabel = getDayLabel(routine.dayOfWeek);
+                  const catMeta = getRoutineCategoryMeta(routine.category, routine.title);
+                  const CategoryIcon = catMeta.icon;
 
-            {/* Lista de Rutinas */}
-            <div className="grid gap-3.5">
-              {routines.map((routine) => {
-                const routineExercises = exercises.filter((ex) => routine.exerciseIds.includes(ex.id));
-                return (
-                  <div
-                    key={routine.id}
-                    className="group bg-slate-900 hover:bg-slate-850 rounded-2xl border border-slate-800/90 hover:border-slate-700 p-4 transition-all shadow-md relative overflow-hidden"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                  return (
+                    <div
+                      key={routine.id}
+                      className="group bg-slate-900 hover:bg-slate-850 rounded-2xl border border-slate-800/90 hover:border-slate-700 p-4 transition-all shadow-md relative"
+                    >
+                      {/* Fila Superior: Badges y Botones de Edición / Eliminación */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {routine.dayOfWeek && routine.dayOfWeek !== 'ninguno' && (
+                            <span
+                              className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${dayStyle.bg} ${dayStyle.text} ${dayStyle.border} flex items-center gap-1`}
+                            >
+                              <CalendarIcon className="w-3 h-3" />
+                              {dayLabel}
+                            </span>
+                          )}
                           <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             {routine.category}
                           </span>
@@ -1193,43 +1770,68 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <h4 className="text-base font-extrabold text-white group-hover:text-emerald-400 transition-colors">
-                          {routine.title}
-                        </h4>
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{routine.description}</p>
 
-                        {/* Chips de ejercicios */}
-                        <div className="flex flex-wrap gap-1.5 mt-3">
-                          {routineExercises.slice(0, 4).map((ex) => (
-                            <span
-                              key={ex.id}
-                              className="text-[11px] font-medium bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700/60"
-                            >
-                              {ex.name}
-                            </span>
-                          ))}
-                          {routineExercises.length > 4 && (
-                            <span className="text-[11px] font-medium bg-slate-800/60 text-slate-400 px-2 py-1 rounded-lg">
-                              +{routineExercises.length - 4} más
-                            </span>
-                          )}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEditRoutineModal(routine)}
+                            className="text-slate-500 hover:text-emerald-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-slate-800"
+                            title="Editar rutina"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setRoutineToDelete(routine)}
+                            className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
+                            title="Eliminar rutina"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Botón grande de Iniciar Rutina */}
-                      <button
-                        onClick={() => handleStartRoutineWorkout(routine)}
-                        className="self-center flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-md shadow-emerald-500/20 active:scale-90 transition shrink-0"
-                        title="Iniciar esta rutina"
-                      >
-                        <Play className="w-5 h-5 fill-current ml-0.5" />
-                      </button>
+                      {/* Información Principal de la Rutina con Icono de Categoría */}
+                      <div className="mb-3">
+                        <h4 className="text-base font-extrabold text-white group-hover:text-emerald-400 transition-colors flex items-center gap-2.5">
+                          <span className={`w-7 h-7 rounded-xl border flex items-center justify-center shrink-0 ${catMeta.bg} ${catMeta.border}`}>
+                            <CategoryIcon className={`w-4 h-4 ${catMeta.color}`} />
+                          </span>
+                          <span className="truncate">{routine.title}</span>
+                        </h4>
+                        {routine.description && (
+                          <p className="text-xs text-slate-400 mt-1 line-clamp-2 pl-9.5">{routine.description}</p>
+                        )}
+                      </div>
+
+                      {/* Botones de Acción: Ver Detalle (Popup) y Empezar Entreno */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                        <button
+                          onClick={() => setSelectedRoutineDetail(routine)}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700/80 active:scale-95 transition"
+                        >
+                          <Eye className="w-4 h-4 text-cyan-400" />
+                          <span>Ver Detalle</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleStartRoutineWorkout(routine)}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition"
+                        >
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                          <span>Iniciar</span>
+                        </button>
+                      </div>
                     </div>
+                  );
+                })}
+
+                {sortedRoutines.length === 0 && (
+                  <div className="text-center py-10 px-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
+                    No hay rutinas creadas todavía. Pulsa "+ Crear Rutina" para diseñar tu primer esquema.
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* ==================================================================
@@ -1565,7 +2167,7 @@ export default function App() {
                   className="w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-700 hover:border-emerald-500/60 bg-slate-900/50 hover:bg-slate-900 text-slate-300 hover:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.99] transition"
                 >
                   <Plus className="w-4 h-4 text-emerald-400" />
-                  <span>+ Añadir Ejercicio a la Sesión</span>
+                  <span>Añadir Ejercicio a la Sesión</span>
                 </button>
 
                 {/* Botón Final "Finalizar y Guardar Entreno" */}
@@ -2201,8 +2803,51 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Preferencias</h3>
 
-              {/* Unidad de Carga */}
+              {/* Tema de la Aplicación (Modo Oscuro / Modo Claro) */}
               <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  {settings.theme === 'light' ? (
+                    <Sun className="w-5 h-5 text-amber-400" />
+                  ) : (
+                    <Moon className="w-5 h-5 text-emerald-400" />
+                  )}
+                  <div>
+                    <span className="text-sm font-extrabold text-white block">Tema de la Aplicación</span>
+                    <span className="text-xs text-slate-500">
+                      {settings.theme === 'light' ? 'Modo Claro' : 'Modo Oscuro (Por defecto)'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, theme: 'dark' })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
+                      settings.theme !== 'light'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5" />
+                    <span>Oscuro</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, theme: 'light' })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
+                      settings.theme === 'light'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                    <span>Claro</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Unidad de Carga */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <div>
                   <span className="text-sm font-extrabold text-white block">Unidad de Peso</span>
                   <span className="text-xs text-slate-500">Kilogramos o Libras</span>
@@ -2599,124 +3244,238 @@ export default function App() {
         </div>
       )}
 
+
+
       {/* ==========================================================================
-          MODAL: CREAR RUTINA PERSONALIZADA
+          MODAL POPUP: DETALLE DE LA RUTINA
           ========================================================================== */}
-      {showCreateRoutineModal && (
+      {selectedRoutineDetail && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
-          <form
-            onSubmit={handleCreateCustomRoutine}
-            className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
-          >
+          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Header del Popup */}
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-base font-black text-white">Diseñar Nueva Rutina</h3>
+              <div className="flex items-center gap-2">
+                {selectedRoutineDetail.dayOfWeek && selectedRoutineDetail.dayOfWeek !== 'ninguno' && (
+                  <span
+                    className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                      getDayBadgeStyle(selectedRoutineDetail.dayOfWeek).bg
+                    } ${getDayBadgeStyle(selectedRoutineDetail.dayOfWeek).text} ${
+                      getDayBadgeStyle(selectedRoutineDetail.dayOfWeek).border
+                    } flex items-center gap-1`}
+                  >
+                    <CalendarIcon className="w-3 h-3" />
+                    {getDayLabel(selectedRoutineDetail.dayOfWeek)}
+                  </span>
+                )}
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  {selectedRoutineDetail.category}
+                </span>
+                {selectedRoutineDetail.isCustom && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    Personalizada
+                  </span>
+                )}
+              </div>
               <button
-                type="button"
-                onClick={() => setShowCreateRoutineModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                onClick={() => setSelectedRoutineDetail(null)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-slate-800 space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-400 block mb-1">Título de la Rutina</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Torso Hipertrofia B"
-                  value={newRotTitle}
-                  onChange={(e) => setNewRotTitle(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1">Categoría</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Empuje / Fuerza"
-                    value={newRotCategory}
-                    onChange={(e) => setNewRotCategory(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1">Descripción</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: 4 series pesadas"
-                    value={newRotDesc}
-                    onChange={(e) => setNewRotDesc(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <span className="text-xs font-bold text-slate-400 block">
-                  Selecciona Ejercicios ({selectedExIdsForRoutine.length} seleccionados):
+            {/* Información General */}
+            <div className="p-4 border-b border-slate-800/80 bg-slate-950/40">
+              {(() => {
+                const modalCatMeta = getRoutineCategoryMeta(selectedRoutineDetail.category, selectedRoutineDetail.title);
+                const ModalCatIcon = modalCatMeta.icon;
+                return (
+                  <h3 className="text-lg font-black text-white flex items-center gap-2.5">
+                    <span className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${modalCatMeta.bg} ${modalCatMeta.border}`}>
+                      <ModalCatIcon className={`w-4 h-4 ${modalCatMeta.color}`} />
+                    </span>
+                    <span>{selectedRoutineDetail.title}</span>
+                  </h3>
+                );
+              })()}
+              {selectedRoutineDetail.description && (
+                <p className="text-xs text-slate-400 mt-1 pl-10.5">{selectedRoutineDetail.description}</p>
+              )}
+              <div className="mt-2.5 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400">
+                  Ejercicios en esta rutina ({selectedRoutineDetail.exerciseIds.length})
                 </span>
+                <span className="text-[10px] text-slate-500">1 serie inicial por ejercicio</span>
               </div>
             </div>
 
-            {/* Listado de selección de ejercicios */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
-              {exercises.map((ex) => {
-                const isSelected = selectedExIdsForRoutine.includes(ex.id);
+            {/* Lista Detallada de Ejercicios */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {selectedRoutineDetail.exerciseIds.map((exId, idx) => {
+                const ex = exercises.find((e) => e.id === exId);
+                const badge = ex ? getEquipmentBadge(ex.equipment) : null;
+                const prevSets = getPreviousExerciseSets(exId);
+                const bestCompletedSet = prevSets.length > 0 ? prevSets[0] : null;
+
                 return (
-                  <button
-                    type="button"
-                    key={ex.id}
-                    onClick={() => {
-                      if (isSelected) {
-                        setSelectedExIdsForRoutine(selectedExIdsForRoutine.filter((id) => id !== ex.id));
-                      } else {
-                        setSelectedExIdsForRoutine([...selectedExIdsForRoutine, ex.id]);
-                      }
-                    }}
-                    className={`w-full p-2.5 rounded-xl border flex items-center justify-between text-left transition ${
-                      isSelected
-                        ? 'bg-emerald-950/40 border-emerald-500/80 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between gap-3"
                   >
-                    <div>
-                      <span className="text-xs font-bold block">{ex.name}</span>
-                      <span className="text-[10px] text-slate-500 capitalize">{ex.muscle} • {ex.equipment}</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 border border-emerald-500/20">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-white truncate">
+                          {ex?.name || 'Ejercicio'}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {badge && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-400 capitalize">{ex?.muscle}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div
-                      className={`w-5 h-5 rounded-md flex items-center justify-center border ${
-                        isSelected
-                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
-                          : 'border-slate-700'
-                      }`}
-                    >
-                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+
+                    <div className="text-right shrink-0">
+                      {bestCompletedSet ? (
+                        <div>
+                          <span className="text-[9px] text-slate-500 block uppercase font-bold">Último</span>
+                          <span className="text-[11px] font-mono-numbers text-emerald-400 font-bold">
+                            {bestCompletedSet.weight} {settings.unit} × {bestCompletedSet.reps}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-600 block">Sin marcas previas</span>
+                      )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
 
-            <div className="p-4 border-t border-slate-800 flex gap-2">
+            {/* Footer con Botones */}
+            <div className="p-4 border-t border-slate-800 flex items-center gap-2 bg-slate-900">
+              <button
+                onClick={() => {
+                  const target = selectedRoutineDetail;
+                  setSelectedRoutineDetail(null);
+                  setRoutineToDelete(target);
+                }}
+                className="p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 active:scale-95 transition"
+                title="Eliminar esta rutina"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  const target = selectedRoutineDetail;
+                  setSelectedRoutineDetail(null);
+                  openEditRoutineModal(target);
+                }}
+                className="py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-95 transition flex items-center gap-1.5 text-xs font-bold"
+                title="Editar esta rutina"
+              >
+                <Pencil className="w-4 h-4 text-emerald-400" />
+                <span>Editar</span>
+              </button>
+              <button
+                onClick={() => setSelectedRoutineDetail(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  const target = selectedRoutineDetail;
+                  setSelectedRoutineDetail(null);
+                  handleStartRoutineWorkout(target);
+                }}
+                className="flex-[2] py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+              >
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+                <span>Iniciar Entreno</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: CONFIRMAR ELIMINACIÓN DE RUTINA
+          ========================================================================== */}
+      {routineToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">¿Eliminar esta rutina?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Se eliminará la rutina <strong className="text-white">"{routineToDelete.title}"</strong> de forma permanente.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setShowCreateRoutineModal(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                onClick={() => setRoutineToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
               >
                 Cancelar
               </button>
               <button
-                type="submit"
-                className="flex-1 py-3 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+                type="button"
+                onClick={() => handleDeleteRoutine(routineToDelete.id)}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
               >
-                Guardar Rutina
+                Sí, Eliminar
               </button>
             </div>
-          </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: CONFIRMAR CANCELAR ENTRENO EN CURSO (FIX BOTÓN CANCELAR)
+          ========================================================================== */}
+      {showCancelWorkoutModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">¿Cancelar entrenamiento?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Se detendrá el cronómetro y se descartará el progreso de esta sesión no guardada.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCancelWorkoutModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+              >
+                Continuar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveWorkout(null);
+                  cancelRestTimer();
+                  setShowCancelWorkoutModal(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
+              >
+                Sí, Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
