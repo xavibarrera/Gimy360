@@ -4478,90 +4478,193 @@ export default function App() {
       )}
 
       {/* ==========================================================================
-          MODAL: WIZARD GENERADOR AUTOMÁTICO DE RUTINAS INTELIGENTES (4 PASOS)
+          VISTA A PANTALLA COMPLETA: GENERADOR INTELIGENTE DE RUTINAS (ALGORITMO LOCAL)
           ========================================================================== */}
       {showWizardModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Header del Asistente */}
-            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between">
+        <div
+          className={`fixed inset-0 z-50 flex flex-col w-full h-full min-h-screen overflow-hidden animate-in fade-in duration-200 ${
+            settings.theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+          }`}
+        >
+          {/* Header Superior Fijo de Pantalla Completa */}
+          <header
+            className={`sticky top-0 z-40 border-b px-4 py-3 sm:px-8 flex items-center justify-between shadow-md backdrop-blur-md ${
+              settings.theme === 'light'
+                ? 'bg-white/95 border-slate-200 text-slate-900'
+                : 'bg-slate-900/95 border-slate-800 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowWizardModal(false)}
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl active:scale-95 transition ${
+                  settings.theme === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+              >
+                <ArrowLeft className="w-4 h-4 text-emerald-400" />
+                <span className="hidden sm:inline">Volver a Rutinas</span>
+                <span className="sm:hidden">Volver</span>
+              </button>
+
+              <div
+                className={`h-6 w-px hidden sm:block ${
+                  settings.theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'
+                }`}
+              />
+
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 text-slate-950 flex items-center justify-center font-bold shadow-md shadow-emerald-500/20">
                   <Wand2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white flex items-center gap-2">
-                    <span>Generador Inteligente de Rutinas</span>
-                  </h3>
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
-                    {wizardStep <= 4 ? `Paso ${wizardStep} de 4` : 'Vista Previa del Plan'}
-                  </span>
+                  <h2 className="text-sm sm:text-base font-black leading-tight">
+                    Generador Inteligente de Rutinas
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-emerald-500">
+                      {wizardStep <= 4 ? `Paso ${wizardStep} de 4` : 'Vista Previa del Plan'}
+                    </span>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setShowWizardModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition"
+                className={`p-2 rounded-xl transition ${
+                  settings.theme === 'light'
+                    ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+                title="Cerrar generador"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+          </header>
 
-            {/* Barra de Progreso de Pasos */}
-            <div className="w-full bg-slate-950 h-1.5">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-300"
-                style={{ width: `${(wizardStep / 5) * 100}%` }}
-              ></div>
+          {/* Barra de Pasos (Stepper Horizontal Visual) */}
+          <div
+            className={`border-b px-4 py-2.5 sm:px-8 ${
+              settings.theme === 'light'
+                ? 'bg-slate-50/90 border-slate-200'
+                : 'bg-slate-900/60 border-slate-800/80'
+            }`}
+          >
+            <div className="max-w-4xl mx-auto flex items-center justify-between">
+              {[
+                { step: 1, label: 'Días' },
+                { step: 2, label: 'Material' },
+                { step: 3, label: 'Objetivo' },
+                { step: 4, label: 'Nivel' },
+                { step: 5, label: 'Revisión' },
+              ].map((item, index) => {
+                const isCurrent = wizardStep === item.step;
+                const isDone = wizardStep > item.step;
+                return (
+                  <React.Fragment key={item.step}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.step < wizardStep) setWizardStep(item.step as any);
+                      }}
+                      disabled={item.step > wizardStep}
+                      className={`flex items-center gap-2 transition-all ${
+                        item.step > wizardStep
+                          ? 'opacity-40 cursor-not-allowed'
+                          : 'cursor-pointer hover:opacity-100'
+                      }`}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+                          isDone
+                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                            : isCurrent
+                            ? 'bg-cyan-500 text-slate-950 ring-2 ring-cyan-400/40 shadow-sm'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {isDone ? <Check className="w-4 h-4 stroke-[3]" /> : item.step}
+                      </div>
+                      <span
+                        className={`text-xs font-bold hidden sm:inline ${
+                          isCurrent
+                            ? 'text-cyan-400 font-extrabold'
+                            : isDone
+                            ? 'text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </button>
+                    {index < 4 && (
+                      <div
+                        className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${
+                          wizardStep > index + 1 ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Cuerpo del Asistente por Pasos */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Contenido Central de la Vista a Pantalla Completa */}
+          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+            <div className="max-w-4xl mx-auto space-y-6 pb-24">
               {/* PASO 1: DÍAS A LA SEMANA */}
               {wizardStep === 1 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Paso 1</span>
-                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuántos días vas a entrenar a la semana?</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      El algoritmo diseñará la división óptima (Full Body, Torso/Pierna o PPL) según tu disponibilidad semanal.
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Paso 1 de 4</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuántos días vas a entrenar a la semana?</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                      El algoritmo local distribuirá las cargas semanales en divisiones de entrenamiento balanceadas (Full Body, Torso/Pierna o Push/Pull/Legs) garantizando días de recuperación adecuados.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
                     {[
                       {
                         days: 2,
                         title: '2 Días / Semana',
                         split: 'Full Body (2x)',
-                        desc: 'Ideal para agendas ocupadas o deportistas con otras disciplinas.',
+                        desc: 'Ideal si tienes poco tiempo o practicas otro deporte. Trabaja todo el cuerpo en cada sesión.',
                         badge: 'Mantenimiento & Fuerza',
                       },
                       {
                         days: 3,
                         title: '3 Días / Semana',
                         split: 'Full Body (3x)',
-                        desc: 'Clásico de fuerza global con máxima recuperación entre sesiones.',
+                        desc: 'La división más probada para fuerza general con 48h completas de recuperación entre sesiones.',
                         badge: 'Alta Eficiencia',
                       },
                       {
                         days: 4,
                         title: '4 Días / Semana',
                         split: 'Torso / Pierna',
-                        desc: 'La división más equilibrada para hipertrofia y progresión lineal.',
-                        badge: 'Recomendado',
+                        desc: 'El balance perfecto entre volumen muscular, progresión lineal y descanso. 2 días torso, 2 días pierna.',
+                        badge: 'Más Popular',
                       },
                       {
                         days: 5,
                         title: '5 Días / Semana',
                         split: 'PPL + Torso/Pierna',
-                        desc: 'Foco en empuje, tirón y pierna con sesiones accesorias.',
+                        desc: 'Empuje, Tirón, Pierna + 2 sesiones accesorias para maximizar estímulo por grupo muscular.',
                         badge: 'Volumen Alto',
                       },
                       {
                         days: 6,
                         title: '6 Días / Semana',
                         split: 'Push / Pull / Legs (2x)',
-                        desc: 'Alta frecuencia y máximo volumen para atletas avanzados.',
+                        desc: 'Frecuencia 2x para cada músculo. Diseñado para usuarios experimentados que buscan máximo crecimiento.',
                         badge: 'Máximo Estímulo',
                       },
                     ].map((item) => {
@@ -4571,20 +4674,20 @@ export default function App() {
                           key={item.days}
                           type="button"
                           onClick={() => setWizardConfig((p) => ({ ...p, days: item.days as WizardDays }))}
-                          className={`p-3.5 rounded-2xl border text-left transition-all active:scale-[0.99] relative flex flex-col justify-between ${
+                          className={`p-4 sm:p-5 rounded-2xl border text-left transition-all active:scale-[0.99] relative flex flex-col justify-between ${
                             isSelected
                               ? 'bg-emerald-950/40 border-emerald-500 text-white ring-1 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
-                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                              : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300'
                           }`}
                         >
                           <div>
-                            <div className="flex items-center justify-between gap-1 mb-1.5">
-                              <span className="text-sm font-black text-white">{item.title}</span>
+                            <div className="flex items-center justify-between gap-1 mb-2">
+                              <span className="text-base font-black text-white">{item.title}</span>
                               <span
                                 className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
                                   isSelected
                                     ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                                    : 'bg-slate-900 text-emerald-400 border-slate-800'
+                                    : 'bg-slate-950 text-emerald-400 border-slate-800'
                                 }`}
                               >
                                 {item.split}
@@ -4592,56 +4695,63 @@ export default function App() {
                             </div>
                             <p className="text-xs text-slate-400 leading-relaxed">{item.desc}</p>
                           </div>
-                          <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-bold text-slate-500">
                             <span>{item.badge}</span>
                             <div
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                              className={`w-5 h-5 rounded-full border flex items-center justify-center ${
                                 isSelected ? 'border-emerald-400 bg-emerald-500 text-slate-950' : 'border-slate-700'
                               }`}
                             >
-                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                             </div>
                           </div>
                         </button>
                       );
                     })}
                   </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
+                    <Lightbulb className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Algoritmo local:</strong> Las rutinas asignan automáticamente los días óptimos de la semana (por ejemplo, Lunes-Jueves para 2 días, Lunes-Miércoles-Viernes para 3 días o Lunes-Martes-Jueves-Viernes para 4 días).
+                    </span>
+                  </div>
                 </div>
               )}
 
               {/* PASO 2: EQUIPAMIENTO DISPONIBLE */}
               {wizardStep === 2 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-cyan-400">Paso 2</span>
-                    <h4 className="text-lg font-black text-white mt-0.5">¿Qué equipamiento tienes disponible?</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Filtramos estrictamente los 126 ejercicios para asignar solo los que puedes realizar.
+                    <span className="text-xs font-black uppercase tracking-wider text-cyan-400">Paso 2 de 4</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Qué equipamiento tienes disponible?</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                      El algoritmo local filtra estrictamente la base de datos de 126 ejercicios para asignar únicamente los que coincidan con tus herramientas disponibles.
                     </p>
                   </div>
 
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-3.5 pt-1">
                     {[
                       {
                         key: 'gimnasio_completo' as WizardEquipment,
                         icon: Dumbbell,
                         title: 'Gimnasio Comercial Completo',
-                        desc: 'Barras olímpicas, mancuernas, poleas, multipower y máquinas guiadas.',
+                        desc: 'Acceso a barras olímpicas, mancuernas, poleas, jaulas de potencia, multipower y máquinas guiadas.',
                         badge: 'Acceso total a 126 ejercicios',
                       },
                       {
                         key: 'solo_mancuernas' as WizardEquipment,
                         icon: Target,
                         title: 'Solo Mancuernas & Peso Corporal',
-                        desc: 'Mancuernas ajustables o fijas y peso corporal. Perfecto para home gym o garaje.',
-                        badge: 'Mancuernas + Corporal',
+                        desc: 'Mancuernas ajustables o fijas y peso corporal. Perfecto para home gym, banco ajustable o garaje.',
+                        badge: 'Filtro: Mancuernas + Corporal',
                       },
                       {
                         key: 'peso_corporal' as WizardEquipment,
                         icon: Activity,
                         title: 'Peso Corporal / Calistenia en Casa',
-                        desc: 'Flexiones, fondos, sentadillas, dominadas y trabajo con tu propio peso sin aparatos.',
-                        badge: 'Sin material pesado',
+                        desc: 'Flexiones, fondos, sentadillas aéreas, dominadas y variantes corporales sin necesidad de máquinas pesadas.',
+                        badge: 'Filtro: Sin material pesado',
                       },
                     ].map((item) => {
                       const isSelected = wizardConfig.equipment === item.key;
@@ -4651,27 +4761,27 @@ export default function App() {
                           key={item.key}
                           type="button"
                           onClick={() => setWizardConfig((p) => ({ ...p, equipment: item.key }))}
-                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                          className={`w-full p-4 sm:p-5 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-4 ${
                             isSelected
                               ? 'bg-cyan-950/40 border-cyan-500 text-white ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10'
-                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                              : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300'
                           }`}
                         >
-                          <div className="flex items-start gap-3.5">
+                          <div className="flex items-start gap-4">
                             <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${
                                 isSelected
-                                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
-                                  : 'bg-slate-900 text-cyan-400 border-slate-800'
+                                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
+                                  : 'bg-slate-950 text-cyan-400 border-slate-800'
                               }`}
                             >
-                              <Icon className="w-5 h-5" />
+                              <Icon className="w-6 h-6" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-extrabold text-white">{item.title}</span>
+                                <span className="text-base font-extrabold text-white">{item.title}</span>
                               </div>
-                              <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                              <p className="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
                               <span className="inline-block mt-2 text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
                                 {item.badge}
                               </span>
@@ -4679,51 +4789,58 @@ export default function App() {
                           </div>
 
                           <div
-                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                            className={`w-6 h-6 rounded-full border shrink-0 flex items-center justify-center ${
                               isSelected ? 'border-cyan-400 bg-cyan-500 text-slate-950' : 'border-slate-700'
                             }`}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
                           </div>
                         </button>
                       );
                     })}
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
+                    <Zap className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Ejecución local garantizada:</strong> Ningún dato sale de tu navegador. El filtrado y la compatibilidad mecánica se calculan 100% en local sin usar la API de Gemini ni servidores remotos.
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* PASO 3: OBJETIVO PRINCIPAL */}
               {wizardStep === 3 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">Paso 3</span>
-                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuál es tu objetivo prioritario?</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Ajusta los rangos de repeticiones y la selección de compuestos y accesorios.
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">Paso 3 de 4</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuál es tu objetivo prioritario?</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                      Ajusta los rangos de repeticiones objetivo, los descansos recomendados y la selección de movimientos básicos frente a accesorios de aislamiento.
                     </p>
                   </div>
 
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-3.5 pt-1">
                     {[
                       {
                         key: 'hipertrofia' as WizardGoal,
                         icon: Flame,
                         title: 'Hipertrofia & Ganancia Muscular',
-                        desc: 'Rango de 8-12 repeticiones. Foco en tensión mecánica, congestión y crecimiento muscular.',
+                        desc: 'Rango óptimo de 8-12 repeticiones. Máxima tensión mecánica y congestión para estimular el crecimiento de masa magra.',
                         badge: 'Reps: 8 - 12 • Descanso: 90s',
                       },
                       {
                         key: 'fuerza' as WizardGoal,
                         icon: Zap,
                         title: 'Fuerza Máxima & Cargas Pesadas',
-                        desc: 'Rango de 4-6 repeticiones. Prioridad en levantamientos básicos pesados y reclutamiento neural.',
+                        desc: 'Rango de 4-6 repeticiones. Prioridad en levantamientos básicos pesados, alta intensidad y reclutamiento neuromuscular.',
                         badge: 'Reps: 4 - 6 • Descanso: 120s',
                       },
                       {
                         key: 'acondicionamiento' as WizardGoal,
                         icon: Sparkles,
                         title: 'Acondicionamiento & Quema Calórica',
-                        desc: 'Rango de 12-15 repeticiones. Mayor densidad, descansos dinámicos y resistencia muscular.',
+                        desc: 'Rango de 12-15 repeticiones. Mayor densidad de trabajo, descansos activos y resistencia a la fatiga muscular.',
                         badge: 'Reps: 12 - 15 • Descanso: 60s',
                       },
                     ].map((item) => {
@@ -4734,25 +4851,25 @@ export default function App() {
                           key={item.key}
                           type="button"
                           onClick={() => setWizardConfig((p) => ({ ...p, goal: item.key }))}
-                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                          className={`w-full p-4 sm:p-5 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-4 ${
                             isSelected
                               ? 'bg-amber-950/40 border-amber-500 text-white ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/10'
-                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                              : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300'
                           }`}
                         >
-                          <div className="flex items-start gap-3.5">
+                          <div className="flex items-start gap-4">
                             <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${
                                 isSelected
-                                  ? 'bg-amber-500 text-slate-950 border-amber-400'
-                                  : 'bg-slate-900 text-amber-400 border-slate-800'
+                                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                                  : 'bg-slate-950 text-amber-400 border-slate-800'
                               }`}
                             >
-                              <Icon className="w-5 h-5" />
+                              <Icon className="w-6 h-6" />
                             </div>
                             <div>
-                              <span className="text-sm font-extrabold text-white block">{item.title}</span>
-                              <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                              <span className="text-base font-extrabold text-white block">{item.title}</span>
+                              <p className="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
                               <span className="inline-block mt-2 text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                                 {item.badge}
                               </span>
@@ -4760,11 +4877,11 @@ export default function App() {
                           </div>
 
                           <div
-                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                            className={`w-6 h-6 rounded-full border shrink-0 flex items-center justify-center ${
                               isSelected ? 'border-amber-400 bg-amber-500 text-slate-950' : 'border-slate-700'
                             }`}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
                           </div>
                         </button>
                       );
@@ -4775,33 +4892,33 @@ export default function App() {
 
               {/* PASO 4: NIVEL DE EXPERIENCIA */}
               {wizardStep === 4 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">Paso 4</span>
-                    <h4 className="text-lg font-black text-white mt-0.5">¿Cuál es tu nivel de experiencia?</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Calibra el número de series base y la complejidad de los movimientos en cada rutina.
+                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">Paso 4 de 4</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuál es tu nivel de experiencia?</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                      Calibra el número de series base y el volumen de trabajo por sesión para mantener un estímulo efectivo sin sobreentrenar.
                     </p>
                   </div>
 
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-3.5 pt-1">
                     {[
                       {
                         key: 'principiante' as WizardLevel,
                         title: 'Principiante (< 1 año)',
-                        desc: '3 series base por ejercicio. Enfoque en dominar la técnica y crear consistencia.',
+                        desc: '3 series base por ejercicio. Enfoque en dominar la técnica de los movimientos y progresión de carga segura.',
                         badge: '3 series base • Progresión gradual',
                       },
                       {
                         key: 'intermedio' as WizardLevel,
                         title: 'Intermedio (1 a 3 años)',
-                        desc: '3 a 4 series base. Balance óptimo de sobrecarga progresiva y recuperación.',
+                        desc: '3 a 4 series base. Balance óptimo de sobrecarga progresiva lineal y volumen de trabajo.',
                         badge: '3-4 series • Sobrecarga lineal',
                       },
                       {
                         key: 'avanzado' as WizardLevel,
                         title: 'Avanzado (> 3 años)',
-                        desc: '4 series efectivas con máxima intensidad y variedad de estímulos.',
+                        desc: '4 series efectivas con alta intensidad, mayor densidad y variedad de ángulos.',
                         badge: '4 series • Alto volumen',
                       },
                     ].map((item) => {
@@ -4811,26 +4928,26 @@ export default function App() {
                           key={item.key}
                           type="button"
                           onClick={() => setWizardConfig((p) => ({ ...p, level: item.key }))}
-                          className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-3 ${
+                          className={`w-full p-4 sm:p-5 rounded-2xl border text-left transition-all active:scale-[0.99] flex items-center justify-between gap-4 ${
                             isSelected
                               ? 'bg-purple-950/40 border-purple-500 text-white ring-1 ring-purple-500/30 shadow-lg shadow-purple-500/10'
-                              : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                              : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300'
                           }`}
                         >
                           <div>
-                            <span className="text-sm font-extrabold text-white block">{item.title}</span>
-                            <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                            <span className="text-base font-extrabold text-white block">{item.title}</span>
+                            <p className="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
                             <span className="inline-block mt-2 text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
                               {item.badge}
                             </span>
                           </div>
 
                           <div
-                            className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                            className={`w-6 h-6 rounded-full border shrink-0 flex items-center justify-center ${
                               isSelected ? 'border-purple-400 bg-purple-500 text-slate-950' : 'border-slate-700'
                             }`}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
                           </div>
                         </button>
                       );
@@ -4841,58 +4958,78 @@ export default function App() {
 
               {/* PASO 5: VISTA PREVIA Y CONFIRMACIÓN */}
               {wizardStep === 5 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Resumen</span>
-                    <h4 className="text-lg font-black text-white mt-0.5">¡Tu programa inteligente está listo!</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Hemos generado {generateIntelligentRoutines(wizardConfig, exercises).length} rutinas personalizadas adaptadas a tus parámetros.
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Revisión Final</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¡Tu programa inteligente está listo!</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+                      El algoritmo local ha generado {generateIntelligentRoutines(wizardConfig, exercises).length} rutinas totalmente adaptadas a tus parámetros.
                     </p>
                   </div>
 
-                  {/* Resumen de Configuración */}
-                  <div className="flex flex-wrap items-center gap-1.5 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                  {/* Resumen de Parámetros */}
+                  <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
                       {wizardConfig.days} Días / Semana
                     </span>
-                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
                       {wizardConfig.equipment.replace('_', ' ')}
                     </span>
-                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
                       {wizardConfig.goal}
                     </span>
-                    <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded font-bold uppercase text-[10px]">
+                    <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
                       {wizardConfig.level}
+                    </span>
+                    <span className="ml-auto text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                      Calculado al instante
                     </span>
                   </div>
 
-                  {/* Lista Previa de Rutinas Generadas */}
-                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                  {/* Lista Previa de Rutinas Generadas en Cards Amplias */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {generateIntelligentRoutines(wizardConfig, exercises).map((rot, idx) => {
                       const dayStyle = getDayBadgeStyle(rot.dayOfWeek);
                       const dayLabel = getDayLabel(rot.dayOfWeek);
                       return (
-                        <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center">
-                                {idx + 1}
+                        <div
+                          key={idx}
+                          className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/90 space-y-2.5 shadow-md flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className="text-sm font-bold text-white flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-black flex items-center justify-center">
+                                  {idx + 1}
+                                </span>
+                                {rot.title}
                               </span>
-                              {rot.title}
-                            </span>
-                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${dayStyle.bg} ${dayStyle.text} ${dayStyle.border}`}>
-                              {dayLabel}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-400 pl-7 space-y-0.5">
-                            {rot.exerciseIds.map((exId, exi) => {
-                              const ex = exercises.find((e) => e.id === exId);
-                              return (
-                                <div key={exi} className="truncate">
-                                  • {ex?.name || 'Ejercicio'} <span className="text-slate-600">({ex?.equipment})</span>
-                                </div>
-                              );
-                            })}
+                              <span
+                                className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${dayStyle.bg} ${dayStyle.text} ${dayStyle.border}`}
+                              >
+                                {dayLabel}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mb-3">{rot.description}</p>
+                            <div className="text-xs text-slate-300 space-y-1 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+                              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                                {rot.exerciseIds.length} Ejercicios Asignados:
+                              </span>
+                              {rot.exerciseIds.map((exId, exi) => {
+                                const ex = exercises.find((e) => e.id === exId);
+                                return (
+                                  <div key={exi} className="flex items-center justify-between text-xs py-0.5">
+                                    <span className="truncate text-slate-200">
+                                      • {ex?.name || 'Ejercicio'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono capitalize shrink-0 ml-2">
+                                      {ex?.equipment}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       );
@@ -4900,78 +5037,101 @@ export default function App() {
                   </div>
 
                   {/* Selector: Reemplazar o Añadir */}
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                  <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2.5 text-xs">
                     <span className="font-bold text-slate-300 block">¿Cómo deseas aplicar este plan?</span>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <button
                         type="button"
                         onClick={() => setWizardReplaceMode('replace')}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition ${
+                        className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-between ${
                           wizardReplaceMode === 'replace'
                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800'
+                            : 'bg-slate-950 text-slate-400 border-slate-800'
                         }`}
                       >
-                        Reemplazar rutinas actuales
+                        <span>Reemplazar rutinas actuales</span>
+                        {wizardReplaceMode === 'replace' && <Check className="w-4 h-4 text-emerald-400" />}
                       </button>
                       <button
                         type="button"
                         onClick={() => setWizardReplaceMode('append')}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition ${
+                        className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-between ${
                           wizardReplaceMode === 'append'
                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800'
+                            : 'bg-slate-950 text-slate-400 border-slate-800'
                         }`}
                       >
-                        Añadir a las existentes
+                        <span>Añadir a las rutinas existentes</span>
+                        {wizardReplaceMode === 'append' && <Check className="w-4 h-4 text-emerald-400" />}
                       </button>
                     </div>
                   </div>
                 </div>
               )}
             </div>
+          </main>
 
-            {/* Footer de Navegación del Wizard */}
-            <div className="p-4 border-t border-slate-800 bg-slate-900 flex items-center justify-between gap-3">
+          {/* Footer Fijo de Pantalla Completa con Acciones de Navegación */}
+          <footer
+            className={`sticky bottom-0 z-40 border-t p-4 sm:px-8 shadow-2xl backdrop-blur-md ${
+              settings.theme === 'light'
+                ? 'bg-white/95 border-slate-200 text-slate-900'
+                : 'bg-slate-900/95 border-slate-800 text-white'
+            }`}
+          >
+            <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
               {wizardStep > 1 ? (
                 <button
                   type="button"
                   onClick={() => setWizardStep((p) => (p - 1) as any)}
-                  className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  className={`py-3 px-5 rounded-xl font-bold text-xs active:scale-95 transition flex items-center gap-1.5 ${
+                    settings.theme === 'light'
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
                 >
-                  Atrás
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Atrás</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => setShowWizardModal(false)}
-                  className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  className={`py-3 px-5 rounded-xl font-bold text-xs active:scale-95 transition ${
+                    settings.theme === 'light'
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
                 >
                   Cancelar
                 </button>
               )}
 
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-bold">
+                <span>Paso {wizardStep} de 5</span>
+              </div>
+
               {wizardStep < 5 ? (
                 <button
                   type="button"
                   onClick={() => setWizardStep((p) => (p + 1) as any)}
-                  className="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-1.5"
+                  className="flex-1 sm:flex-none sm:min-w-48 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-1.5"
                 >
-                  <span>Siguiente</span>
-                  <ChevronRight className="w-4 h-4" />
+                  <span>Siguiente Paso</span>
+                  <ChevronRight className="w-4 h-4 stroke-[3]" />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleApplyGeneratedRoutines}
-                  className="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-emerald-500/25 active:scale-95 transition flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none sm:min-w-64 py-3.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-emerald-500/25 active:scale-95 transition flex items-center justify-center gap-2"
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 stroke-[2.5]" />
                   <span>Aplicar Plan de Entrenamiento</span>
                 </button>
               )}
             </div>
-          </div>
+          </footer>
         </div>
       )}
 
