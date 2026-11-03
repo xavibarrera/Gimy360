@@ -974,6 +974,39 @@ function getMuscleBadge(muscle: MuscleGroup) {
   return map[muscle] || muscle;
 }
 
+// Orden prioritario por Tipo: Pecho, Hombro, Espalda, Piernas, Brazos, Core
+export const MUSCLE_SORT_ORDER: Record<MuscleGroup, number> = {
+  pecho: 1,
+  hombro: 2,
+  espalda: 3,
+  piernas: 4,
+  brazos: 5,
+  core: 6,
+};
+
+// Ordenar ejercicios jerárquicamente: 1º por Tipo, 2º por Material (Barra, Corporal...) y 3º Alfabéticamente por Nombre
+export function sortExercisesByTypeMaterialName(list: Exercise[]): Exercise[] {
+  return [...list].sort((a, b) => {
+    // 1. Por tipo (Pecho, hombros, etc.)
+    const orderA = MUSCLE_SORT_ORDER[a.muscle] ?? 99;
+    const orderB = MUSCLE_SORT_ORDER[b.muscle] ?? 99;
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    // 2. Por material (Barra, Corporal, Mancuerna, Máquina, Polea / Cable, Smith / Multi)
+    const eqLabelA = getEquipmentBadge(a.equipment).label;
+    const eqLabelB = getEquipmentBadge(b.equipment).label;
+    const eqDiff = eqLabelA.localeCompare(eqLabelB, 'es', { sensitivity: 'base' });
+    if (eqDiff !== 0) {
+      return eqDiff;
+    }
+
+    // 3. Alfabéticamente por nombre
+    return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+  });
+}
+
 // Disparador de confeti en Canvas puro (cero dependencias externas)
 function fireConfetti() {
   const canvas = document.createElement('canvas');
@@ -1454,6 +1487,18 @@ export default function App() {
       ...activeWorkout,
       exercises: [...activeWorkout.exercises, newExercise],
     });
+
+    // Si la sesión proviene de una rutina guardada, actualizar la rutina para guardar los cambios para futuras ejecuciones
+    if (activeWorkout.routineId) {
+      setRoutines((prev) =>
+        prev.map((r) =>
+          r.id === activeWorkout.routineId
+            ? { ...r, exerciseIds: [...r.exerciseIds, exerciseId] }
+            : r
+        )
+      );
+    }
+
     // Al añadir un ejercicio manualmente se abre automáticamente para editarlo
     setExpandedExerciseIds((prev) => ({
       ...prev,
@@ -1465,9 +1510,27 @@ export default function App() {
   // Quitar ejercicio del entreno activo
   const handleRemoveExerciseFromWorkout = (exerciseIndex: number) => {
     if (!activeWorkout) return;
+    const targetEx = activeWorkout.exercises[exerciseIndex];
     const updated = [...activeWorkout.exercises];
     updated.splice(exerciseIndex, 1);
     setActiveWorkout({ ...activeWorkout, exercises: updated });
+
+    // Si la sesión proviene de una rutina guardada, quitar el ejercicio de la rutina para futuras ejecuciones
+    if (activeWorkout.routineId && targetEx) {
+      setRoutines((prev) =>
+        prev.map((r) => {
+          if (r.id === activeWorkout.routineId) {
+            const idx = r.exerciseIds.indexOf(targetEx.exerciseId);
+            if (idx !== -1) {
+              const newExIds = [...r.exerciseIds];
+              newExIds.splice(idx, 1);
+              return { ...r, exerciseIds: newExIds };
+            }
+          }
+          return r;
+        })
+      );
+    }
   };
 
   // Modificar serie en entreno activo
@@ -1575,6 +1638,24 @@ export default function App() {
       exercises: updated,
     });
 
+    // Si la sesión proviene de una rutina guardada, sincronizar la sustitución para futuras ejecuciones
+    if (activeWorkout.routineId) {
+      const oldExId = target.exerciseId;
+      setRoutines((prev) =>
+        prev.map((r) => {
+          if (r.id === activeWorkout.routineId) {
+            const idx = r.exerciseIds.indexOf(oldExId);
+            if (idx !== -1) {
+              const newExIds = [...r.exerciseIds];
+              newExIds[idx] = newExerciseId;
+              return { ...r, exerciseIds: newExIds };
+            }
+          }
+          return r;
+        })
+      );
+    }
+
     setSubstituteExerciseModal(null);
   };
 
@@ -1629,6 +1710,20 @@ export default function App() {
       durationSeconds: duration,
       exercises: cleanedExercises,
     };
+
+    // Si el entrenamiento proviene de una rutina guardada, asegurar que la plantilla de la rutina mantenga los ejercicios finales
+    if (activeWorkout.routineId) {
+      const finalRoutineExerciseIds = activeWorkout.exercises.map((e) => e.exerciseId);
+      if (finalRoutineExerciseIds.length > 0) {
+        setRoutines((prev) =>
+          prev.map((r) =>
+            r.id === activeWorkout.routineId
+              ? { ...r, exerciseIds: finalRoutineExerciseIds }
+              : r
+          )
+        );
+      }
+    }
 
     // Guardar en historial
     setHistory((prev) => [completedSession, ...prev]);
@@ -1991,13 +2086,14 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // Filtrado de ejercicios para el catálogo y selección
+  // Filtrado y ordenación jerárquica de ejercicios (1º Tipo, 2º Material, 3º Alfabético)
   const filteredExercises = useMemo(() => {
-    return exercises.filter((ex) => {
+    const list = exercises.filter((ex) => {
       const matchesSearch = ex.name.toLowerCase().includes(searchExerciseQuery.toLowerCase());
       const matchesMuscle = selectedMuscleFilter === 'todos' || ex.muscle === selectedMuscleFilter;
       return matchesSearch && matchesMuscle;
     });
+    return sortExercisesByTypeMaterialName(list);
   }, [exercises, searchExerciseQuery, selectedMuscleFilter]);
 
   return (
@@ -2333,42 +2429,42 @@ export default function App() {
 
                   {/* Lista de ejercicios con scroll natural */}
                   <div className="space-y-2 pt-1">
-                    {exercises
-                      .filter((ex) => {
+                    {sortExercisesByTypeMaterialName(
+                      exercises.filter((ex) => {
                         const matchesSearch = ex.name.toLowerCase().includes(newRotSearchQuery.toLowerCase());
                         const matchesMuscle = newRotMuscleFilter === 'todos' || ex.muscle === newRotMuscleFilter;
                         return matchesSearch && matchesMuscle;
                       })
-                      .map((ex) => {
-                        const isSelected = selectedExIdsForRoutine.includes(ex.id);
-                        const badge = getEquipmentBadge(ex.equipment);
+                    ).map((ex) => {
+                      const isSelected = selectedExIdsForRoutine.includes(ex.id);
+                      const badge = getEquipmentBadge(ex.equipment);
 
-                        return (
-                          <button
-                            type="button"
-                            key={ex.id}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedExIdsForRoutine(selectedExIdsForRoutine.filter((id) => id !== ex.id));
-                              } else {
-                                setSelectedExIdsForRoutine([...selectedExIdsForRoutine, ex.id]);
-                              }
-                            }}
-                            className={`w-full p-3.5 rounded-2xl border flex items-center justify-between text-left transition-all active:scale-[0.99] ${
-                              isSelected
-                                ? 'bg-emerald-950/40 border-emerald-500/80 text-white shadow-sm shadow-emerald-500/10'
-                                : 'bg-slate-950 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:bg-slate-900/60'
-                            }`}
-                          >
-                            <div className="min-w-0 pr-3">
-                              <span className="text-sm font-bold block truncate text-slate-100">{ex.name}</span>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.color}`}>
-                                  {badge.label}
-                                </span>
-                                <span className="text-xs text-slate-400 capitalize">{ex.muscle}</span>
-                              </div>
+                      return (
+                        <button
+                          type="button"
+                          key={ex.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedExIdsForRoutine(selectedExIdsForRoutine.filter((id) => id !== ex.id));
+                            } else {
+                              setSelectedExIdsForRoutine([...selectedExIdsForRoutine, ex.id]);
+                            }
+                          }}
+                          className={`w-full p-3.5 rounded-2xl border flex items-center justify-between text-left transition-all active:scale-[0.99] ${
+                            isSelected
+                              ? 'bg-emerald-950/40 border-emerald-500/80 text-white shadow-sm shadow-emerald-500/10'
+                              : 'bg-slate-950 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:bg-slate-900/60'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-3 flex-1">
+                            <span className="text-sm font-bold block break-words text-slate-100">{ex.name}</span>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                              <span className="text-xs text-slate-400 capitalize">{getMuscleBadge(ex.muscle)}</span>
                             </div>
+                          </div>
 
                             <div
                               className={`w-6 h-6 rounded-lg flex items-center justify-center border shrink-0 transition-colors ${
@@ -2667,8 +2763,9 @@ export default function App() {
                         {/* Cabecera Táctil del Ejercicio (Click para Expandir / Colapsar) */}
                         <div
                           onClick={() => toggleExerciseExpand(workoutEx.id)}
-                          className="flex items-center justify-between gap-2 p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none"
+                          className="p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none space-y-2"
                         >
+                          {/* LÍNEA 1: Reservada para número de ejercicio y nombre (truncate sin saltar de línea) */}
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span
                               className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
@@ -2679,80 +2776,84 @@ export default function App() {
                             >
                               {isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : exIdx + 1}
                             </span>
-                            <div className="min-w-0">
-                              <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
-                                {exerciseInfo?.name || 'Ejercicio'}
-                              </h3>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                {exerciseInfo && (
-                                  <span
-                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                                      getEquipmentBadge(exerciseInfo.equipment).color
-                                    }`}
-                                  >
-                                    {getEquipmentBadge(exerciseInfo.equipment).label}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-slate-400 capitalize">
-                                  {exerciseInfo?.muscle}
-                                </span>
-                              </div>
-                            </div>
+                            <h3 className="text-sm sm:text-base font-extrabold text-white truncate min-w-0 flex-1">
+                              {exerciseInfo?.name || 'Ejercicio'}
+                            </h3>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            {/* Badge de Progreso de Series */}
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
-                                isAllCompleted
-                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
-                                  : completedSetsCount > 0
-                                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700/80'
-                              }`}
-                            >
-                              {isAllCompleted ? (
-                                <>
-                                  <Check className="w-3 h-3 stroke-[3]" /> Completo
-                                </>
-                              ) : (
-                                `${completedSetsCount}/${totalSetsCount} series`
+                          {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y acciones a la derecha */}
+                          <div className="flex items-center justify-between gap-2 pt-0.5">
+                            {/* Material y Grupo Muscular */}
+                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                              {exerciseInfo && (
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                    getEquipmentBadge(exerciseInfo.equipment).color
+                                  }`}
+                                >
+                                  {getEquipmentBadge(exerciseInfo.equipment).label}
+                                </span>
                               )}
-                            </span>
+                              <span className="text-[10px] text-slate-400 capitalize">
+                                {exerciseInfo ? getMuscleBadge(exerciseInfo.muscle) : ''}
+                              </span>
+                            </div>
 
-                            {/* Botón Sustituir Ejercicio (Máquina Ocupada) */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenSubstituteModal(exIdx);
-                              }}
-                              className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-cyan-500/10 flex items-center gap-1 border border-transparent hover:border-cyan-500/30"
-                              title="Sustituir por alternativa si la máquina está ocupada"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                              <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">Sustituir</span>
-                            </button>
-
-                            {/* Botón Eliminar Ejercicio */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveExerciseFromWorkout(exIdx);
-                              }}
-                              className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition"
-                              title="Eliminar este ejercicio"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-
-                            {/* Flecha Chevron Giratoria */}
-                            <div className="p-1 text-slate-400">
-                              <ChevronDown
-                                className={`w-4 h-4 transition-transform duration-200 ${
-                                  isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                            {/* Acciones y Estado */}
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              {/* Badge de Progreso de Series */}
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
+                                  isAllCompleted
+                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
+                                    : completedSetsCount > 0
+                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                                    : 'bg-slate-800 text-slate-400 border-slate-700/80'
                                 }`}
-                              />
+                              >
+                                {isAllCompleted ? (
+                                  <>
+                                    <Check className="w-3 h-3 stroke-[3]" /> Completo
+                                  </>
+                                ) : (
+                                  `${completedSetsCount}/${totalSetsCount} series`
+                                )}
+                              </span>
+
+                              {/* Botón Sustituir Ejercicio (Máquina Ocupada) */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenSubstituteModal(exIdx);
+                                }}
+                                className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-cyan-500/10 flex items-center gap-1 border border-transparent hover:border-cyan-500/30"
+                                title="Sustituir por alternativa si la máquina está ocupada"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">Sustituir</span>
+                              </button>
+
+                              {/* Botón Eliminar Ejercicio */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveExerciseFromWorkout(exIdx);
+                                }}
+                                className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
+                                title="Eliminar este ejercicio"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+
+                              {/* Flecha Chevron Giratoria */}
+                              <div className="p-0.5 text-slate-400">
+                                <ChevronDown
+                                  className={`w-4 h-4 transition-transform duration-200 ${
+                                    isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                  }`}
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -3060,9 +3161,9 @@ export default function App() {
                 )}
               </div>
 
-              {/* Filtro por Grupo Muscular */}
+              {/* Filtro por Grupo Muscular (Mismo orden prioritario: Pecho, Hombro, Espalda...) */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                {(['todos', 'pecho', 'espalda', 'piernas', 'hombro', 'brazos', 'core'] as const).map(
+                {(['todos', 'pecho', 'hombro', 'espalda', 'piernas', 'brazos', 'core'] as const).map(
                   (m) => (
                     <button
                       key={m}
@@ -3080,10 +3181,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Listado de Ejercicios */}
-            <div className="grid gap-2.5">
-              {filteredExercises.map((exercise) => {
+            {/* Listado de Ejercicios Ordenados Jerárquicamente */}
+            <div className="space-y-2.5">
+              {filteredExercises.map((exercise, idx) => {
                 const badge = getEquipmentBadge(exercise.equipment);
+                const prevEx = idx > 0 ? filteredExercises[idx - 1] : null;
+                const isNewGroup = !prevEx || prevEx.muscle !== exercise.muscle;
+
                 // Buscar si tiene historial y mejor 1RM
                 let best1RM = 0;
                 history.forEach((s) => {
@@ -3099,60 +3203,75 @@ export default function App() {
                 });
 
                 return (
-                  <div
-                    key={exercise.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-slate-700 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
-                        <Dumbbell className="w-4 h-4 text-slate-400" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="text-xs sm:text-sm font-extrabold text-white">{exercise.name}</h4>
-                          {exercise.isCustom && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400">
-                              Custom
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.color}`}>
-                            {badge.label}
-                          </span>
-                          <span className="text-[10px] text-slate-400 capitalize">
+                  <React.Fragment key={exercise.id}>
+                    {isNewGroup && selectedMuscleFilter === 'todos' && (
+                      <div className="pt-3 pb-1 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
                             {getMuscleBadge(exercise.muscle)}
                           </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {best1RM > 0 ? (
-                        <div className="text-right">
-                          <span className="text-[9px] font-bold uppercase text-slate-500 block">Record 1RM</span>
-                          <span className="text-xs font-mono-numbers font-black text-emerald-400">
-                            {best1RM} {settings.unit}
+                          <span className="text-[10px] text-slate-500 font-bold">
+                            ({filteredExercises.filter((e) => e.muscle === exercise.muscle).length} ejercicios)
                           </span>
                         </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-600">Sin registro</span>
-                      )}
+                        <div className="h-px bg-slate-800 flex-1 ml-3" />
+                      </div>
+                    )}
 
-                      {/* Botón ver evolución en gráfico */}
-                      <button
-                        onClick={() => {
-                          setSelectedHistoryExerciseId(exercise.id);
-                          setHistorySubTab('progreso');
-                          setActiveTab('historial');
-                        }}
-                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 transition"
-                        title="Ver progresión de este ejercicio"
-                      >
-                        <TrendingUp className="w-4 h-4 text-emerald-400" />
-                      </button>
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-slate-700 transition">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
+                          <Dumbbell className="w-4 h-4 text-slate-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="text-xs sm:text-sm font-extrabold text-white leading-snug break-words">
+                              {exercise.name}
+                            </h4>
+                            {exercise.isCustom && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 shrink-0">
+                                Custom
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400 capitalize">
+                              {getMuscleBadge(exercise.muscle)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {best1RM > 0 ? (
+                          <div className="text-right">
+                            <span className="text-[9px] font-bold uppercase text-slate-500 block">Record 1RM</span>
+                            <span className="text-xs font-mono-numbers font-black text-emerald-400">
+                              {best1RM} {settings.unit}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-600">Sin registro</span>
+                        )}
+
+                        {/* Botón ver evolución en gráfico */}
+                        <button
+                          onClick={() => {
+                            setSelectedHistoryExerciseId(exercise.id);
+                            setHistorySubTab('progreso');
+                            setActiveTab('historial');
+                          }}
+                          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 transition"
+                          title="Ver progresión de este ejercicio"
+                        >
+                          <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </React.Fragment>
                 );
               })}
 
@@ -3915,7 +4034,7 @@ export default function App() {
               </div>
 
               <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
-                {(['todos', 'pecho', 'espalda', 'piernas', 'hombro', 'brazos', 'core'] as const).map(
+                {(['todos', 'pecho', 'hombro', 'espalda', 'piernas', 'brazos', 'core'] as const).map(
                   (m) => (
                     <button
                       key={m}
@@ -3926,7 +4045,7 @@ export default function App() {
                           : 'bg-slate-800 text-slate-400'
                       }`}
                     >
-                      {m}
+                      {m === 'todos' ? 'Todos' : getMuscleBadge(m)}
                     </button>
                   )
                 )}
@@ -3942,15 +4061,15 @@ export default function App() {
                     onClick={() => handleAddExerciseToWorkout(ex.id)}
                     className="w-full text-left p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/80 hover:border-emerald-500/40 flex items-center justify-between group transition active:scale-[0.98]"
                   >
-                    <div>
-                      <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    <div className="min-w-0 pr-2 flex-1">
+                      <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-emerald-400 transition-colors leading-snug break-words">
                         {ex.name}
                       </h4>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
                           {badge.label}
                         </span>
-                        <span className="text-[10px] text-slate-500 capitalize">{ex.muscle}</span>
+                        <span className="text-[10px] text-slate-400 capitalize">{getMuscleBadge(ex.muscle)}</span>
                       </div>
                     </div>
                     <Plus className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -4418,7 +4537,9 @@ export default function App() {
                   return isSameMuscle && isNotCurrent && notInWorkout && matchesSearch && matchesEq;
                 });
 
-                if (alternatives.length === 0) {
+                const sortedAlternatives = sortExercisesByTypeMaterialName(alternatives);
+
+                if (sortedAlternatives.length === 0) {
                   return (
                     <div className="text-center py-8 px-4 text-xs text-slate-500">
                       No se encontraron ejercicios alternativos con los filtros seleccionados.
@@ -4426,7 +4547,7 @@ export default function App() {
                   );
                 }
 
-                return alternatives.map((alt) => {
+                return sortedAlternatives.map((alt) => {
                   const badge = getEquipmentBadge(alt.equipment);
                   const prevSets = getPreviousExerciseSets(alt.id);
                   const bestPrev = prevSets.length > 0 ? prevSets[0] : null;
@@ -4437,8 +4558,8 @@ export default function App() {
                       onClick={() => handleApplySubstituteExercise(alt.id)}
                       className="w-full p-2.5 rounded-xl hover:bg-slate-800/70 border border-transparent hover:border-slate-700 transition flex items-center justify-between text-left group active:scale-[0.99]"
                     >
-                      <div className="min-w-0 pr-2">
-                        <span className="text-xs sm:text-sm font-bold text-white block truncate group-hover:text-cyan-400 transition-colors">
+                      <div className="min-w-0 pr-2 flex-1">
+                        <span className="text-xs sm:text-sm font-bold text-white block group-hover:text-cyan-400 transition-colors leading-snug break-words">
                           {alt.name}
                         </span>
                         <div className="flex items-center gap-2 mt-1">
