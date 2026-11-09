@@ -47,7 +47,10 @@ import {
   Target,
   Wand2,
   Lightbulb,
-  RefreshCw
+  RefreshCw,
+  Share2,
+  Camera,
+  ExternalLink
 } from 'lucide-react';
 
 /* ==========================================================================
@@ -1087,6 +1090,331 @@ function fireConfetti() {
 }
 
 /* ==========================================================================
+   UTILIDADES PARA PUBLICAR EN INSTAGRAM STORIES
+   ========================================================================== */
+
+export function InstagramIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+    </svg>
+  );
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r);
+  } else {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+}
+
+export type InstagramStoryTheme = 'sunset' | 'emerald' | 'cyan';
+
+export function getInstagramCaptionText(session: WorkoutSession, unit: string): string {
+  let totalVol = 0;
+  let totalSets = 0;
+  session.exercises.forEach((ex) => {
+    ex.sets.forEach((s) => {
+      if (s.completed) {
+        totalVol += s.weight * s.reps;
+        totalSets += 1;
+      }
+    });
+  });
+
+  return `🏋️ ¡Entrenamiento completado en Gimy360! 💪
+
+🔥 ${session.title}
+⏱️ Tiempo: ${formatTime(session.durationSeconds)}
+📦 Volumen Total: ${totalVol.toLocaleString()} ${unit}
+⚡ Series Realizadas: ${totalSets}
+
+#Gimy360 #Fitness #Workout #GymProgress #SobrecargaProgresiva #Entrenamiento #GymLife`;
+}
+
+export function renderInstagramStoryCanvas(
+  canvas: HTMLCanvasElement,
+  session: WorkoutSession,
+  exercisesList: Exercise[],
+  unit: string,
+  theme: InstagramStoryTheme
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const W = 1080;
+  const H = 1920;
+  canvas.width = W;
+  canvas.height = H;
+
+  // Paletas de color según tema
+  let bgGrad1 = '#130420';
+  let bgGrad2 = '#230528';
+  let glowColor = 'rgba(236, 72, 153, 0.22)';
+  let glowColor2 = 'rgba(245, 158, 11, 0.16)';
+  let primaryAccent = '#f43f5e'; // rose/pink Instagram
+  let secondaryAccent = '#f59e0b'; // amber/gold
+  let borderAccent = 'rgba(244, 63, 94, 0.35)';
+  let cardBg = 'rgba(28, 8, 38, 0.75)';
+
+  if (theme === 'emerald') {
+    bgGrad1 = '#02120e';
+    bgGrad2 = '#041d16';
+    glowColor = 'rgba(16, 185, 129, 0.25)';
+    glowColor2 = 'rgba(6, 182, 212, 0.15)';
+    primaryAccent = '#10b981';
+    secondaryAccent = '#38bdf8';
+    borderAccent = 'rgba(16, 185, 129, 0.35)';
+    cardBg = 'rgba(6, 26, 20, 0.78)';
+  } else if (theme === 'cyan') {
+    bgGrad1 = '#03101c';
+    bgGrad2 = '#020914';
+    glowColor = 'rgba(6, 182, 212, 0.25)';
+    glowColor2 = 'rgba(139, 92, 246, 0.18)';
+    primaryAccent = '#06b6d4';
+    secondaryAccent = '#a855f7';
+    borderAccent = 'rgba(6, 182, 212, 0.35)';
+    cardBg = 'rgba(8, 24, 40, 0.78)';
+  }
+
+  // Fondo con degradado principal
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  bgGrad.addColorStop(0, bgGrad1);
+  bgGrad.addColorStop(1, bgGrad2);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Orbes de luz difuminada (Aesthetic Glow)
+  const orb1 = ctx.createRadialGradient(W * 0.2, H * 0.18, 50, W * 0.2, H * 0.18, 650);
+  orb1.addColorStop(0, glowColor);
+  orb1.addColorStop(1, 'transparent');
+  ctx.fillStyle = orb1;
+  ctx.fillRect(0, 0, W, H);
+
+  const orb2 = ctx.createRadialGradient(W * 0.85, H * 0.65, 50, W * 0.85, H * 0.65, 750);
+  orb2.addColorStop(0, glowColor2);
+  orb2.addColorStop(1, 'transparent');
+  ctx.fillStyle = orb2;
+  ctx.fillRect(0, 0, W, H);
+
+  // Marco de borde exterior elegante
+  ctx.save();
+  ctx.strokeStyle = borderAccent;
+  ctx.lineWidth = 4;
+  drawRoundedRect(ctx, 40, 40, W - 80, H - 80, 36);
+  ctx.stroke();
+  ctx.restore();
+
+  // 1. Cabecera de Marca (Branding Gimy360)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 48px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('GIMY', 100, 145);
+  const logoWidth = ctx.measureText('GIMY').width;
+  ctx.fillStyle = primaryAccent;
+  ctx.fillText('360', 100 + logoWidth, 145);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('WORKOUT & LOAD PROGRESSION', 100, 180);
+
+  // Badge de fecha en esquina superior derecha
+  const dateFormatted = new Date(session.startTime).toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).toUpperCase();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  drawRoundedRect(ctx, W - 380, 110, 280, 58, 20);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(dateFormatted, W - 240, 147);
+  ctx.textAlign = 'left';
+
+  // 2. Título de la Sesión y Badge de Estado
+  ctx.fillStyle = primaryAccent;
+  ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('⚡ SESIÓN COMPLETADA', 100, 280);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 64px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  let title = session.title;
+  if (ctx.measureText(title).width > 880) {
+    while (ctx.measureText(title + '...').width > 880 && title.length > 0) {
+      title = title.slice(0, -1);
+    }
+    title += '...';
+  }
+  ctx.fillText(title, 100, 360);
+
+  // 3. Métricas Principales (3 Tarjetas Grandes de Estadísticas)
+  let totalVol = 0;
+  let totalSets = 0;
+  session.exercises.forEach((ex) => {
+    ex.sets.forEach((s) => {
+      if (s.completed) {
+        totalVol += s.weight * s.reps;
+        totalSets += 1;
+      }
+    });
+  });
+
+  const statsY = 415;
+  const statW = 280;
+  const statH = 185;
+  const statGap = 20;
+
+  const stats = [
+    { label: 'TIEMPO', val: formatTime(session.durationSeconds), sub: 'duración activa', color: '#ffffff' },
+    { label: 'VOLUMEN', val: `${totalVol.toLocaleString()} ${unit}`, sub: 'tonelaje total', color: primaryAccent },
+    { label: 'SERIES', val: `${totalSets}`, sub: 'series logradas', color: secondaryAccent },
+  ];
+
+  stats.forEach((st, i) => {
+    const x = 100 + i * (statW + statGap);
+    ctx.fillStyle = cardBg;
+    drawRoundedRect(ctx, x, statsY, statW, statH, 24);
+    ctx.fill();
+    ctx.strokeStyle = borderAccent;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(st.label, x + 24, statsY + 45);
+
+    ctx.fillStyle = st.color;
+    ctx.font = '900 36px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(st.val, x + 24, statsY + 110);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(st.sub, x + 24, statsY + 150);
+  });
+
+  // 4. Sección de Ejercicios y Marcas
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '900 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('EJERCICIOS DESTACADOS Y CARGAS', 100, 665);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.beginPath();
+  ctx.moveTo(100, 685);
+  ctx.lineTo(W - 100, 685);
+  ctx.stroke();
+
+  // Filtrar hasta 5 ejercicios que tengan al menos 1 serie completada
+  const validExs = session.exercises.filter((we) => we.sets.some((s) => s.completed)).slice(0, 5);
+  let currentY = 715;
+  const cardH = 138;
+
+  validExs.forEach((we, idx) => {
+    const exInfo = exercisesList.find((e) => e.id === we.exerciseId);
+    const completedSets = we.sets.filter((s) => s.completed);
+    const bestWeight = Math.max(...completedSets.map((s) => s.weight), 0);
+    const bestSet = completedSets.find((s) => s.weight === bestWeight) || completedSets[0];
+
+    // Fondo de tarjeta de ejercicio
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    drawRoundedRect(ctx, 100, currentY, W - 200, cardH, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Círculo de Número
+    ctx.fillStyle = primaryAccent;
+    drawRoundedRect(ctx, 125, currentY + 30, 48, 48, 14);
+    ctx.fill();
+    ctx.fillStyle = '#020617';
+    ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${idx + 1}`, 149, currentY + 63);
+    ctx.textAlign = 'left';
+
+    // Nombre de Ejercicio
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    let exName = exInfo?.name || 'Ejercicio';
+    if (ctx.measureText(exName).width > 470) {
+      while (ctx.measureText(exName + '...').width > 470 && exName.length > 0) {
+        exName = exName.slice(0, -1);
+      }
+      exName += '...';
+    }
+    ctx.fillText(exName, 195, currentY + 62);
+
+    // Etiqueta de Material y Músculo
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const tag = `${exInfo?.equipment ? exInfo.equipment.toUpperCase() : 'EQUIPO'} • ${exInfo?.muscle ? exInfo.muscle.toUpperCase() : 'MÚSCULO'}`;
+    ctx.fillText(tag, 195, currentY + 102);
+
+    // Columna Derecha: Mejor Marca (Max Weight)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = primaryAccent;
+    ctx.font = '900 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`${bestWeight} ${unit}`, W - 130, currentY + 62);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '700 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`${bestSet?.reps || 0} reps • ${completedSets.length} series`, W - 130, currentY + 102);
+    ctx.textAlign = 'left';
+
+    currentY += cardH + 18;
+  });
+
+  // 5. Banner Motivacional
+  const bannerY = 1570;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+  drawRoundedRect(ctx, 100, bannerY, W - 200, 190, 24);
+  ctx.fill();
+  ctx.strokeStyle = borderAccent;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = secondaryAccent;
+  ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🔥 SOBRECARGA PROGRESIVA & DISCIPLINA', W / 2, bannerY + 55);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Cada repetición cuenta en Gimy360', W / 2, bannerY + 108);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('#Gimy360 • #Fitness • #GymMotivation • #Workout', W / 2, bannerY + 150);
+
+  // 6. Pie de Página
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('GIMY360 PWA • GIMNASIO & PROGRESIÓN DE CARGA', W / 2, 1830);
+  ctx.textAlign = 'left';
+}
+
+/* ==========================================================================
    COMPONENTE PRINCIPAL
    ========================================================================== */
 
@@ -1198,10 +1526,18 @@ export default function App() {
   const [showCreateExerciseModal, setShowCreateExerciseModal] = useState<boolean>(false);
   const [isRoutineEditorOpen, setIsRoutineEditorOpen] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<WorkoutSession | null>(null);
+  const [showCancelWorkoutModal, setShowCancelWorkoutModal] = useState<boolean>(false);
   const [selectedRoutineDetail, setSelectedRoutineDetail] = useState<Routine | null>(null);
   const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null);
-  const [showCancelWorkoutModal, setShowCancelWorkoutModal] = useState<boolean>(false);
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
+
+  // Estados para Publicación y Story de Instagram
+  const [instagramShareSession, setInstagramShareSession] = useState<WorkoutSession | null>(null);
+  const [instagramTheme, setInstagramTheme] = useState<InstagramStoryTheme>('sunset');
+  const [isSharingInstagram, setIsSharingInstagram] = useState<boolean>(false);
+  const [copyCaptionSuccess, setCopyCaptionSuccess] = useState<boolean>(false);
+  const [shareSuccessToast, setShareSuccessToast] = useState<string | null>(null);
+  const instagramCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Estados para el Generador Inteligente de Rutinas (Onboarding Wizard)
   const [showWizardModal, setShowWizardModal] = useState<boolean>(false);
@@ -1738,6 +2074,90 @@ export default function App() {
   };
 
   /* ==========================================================================
+     PUBLICACIÓN Y STORIES DE INSTAGRAM
+     ========================================================================== */
+
+  const handleOpenInstagramShare = (session: WorkoutSession) => {
+    setInstagramShareSession(session);
+    setCopyCaptionSuccess(false);
+  };
+
+  useEffect(() => {
+    if (instagramShareSession && instagramCanvasRef.current) {
+      renderInstagramStoryCanvas(
+        instagramCanvasRef.current,
+        instagramShareSession,
+        exercises,
+        settings.unit,
+        instagramTheme
+      );
+    }
+  }, [instagramShareSession, instagramTheme, exercises, settings.unit]);
+
+  const handleShareToInstagram = async () => {
+    if (!instagramCanvasRef.current || !instagramShareSession) return;
+    setIsSharingInstagram(true);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        instagramCanvasRef.current?.toBlob(resolve, 'image/png')
+      );
+      if (!blob) throw new Error('No se pudo generar la imagen');
+
+      const file = new File([blob], `gimy360_story_${Date.now()}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Gimy360 - ${instagramShareSession.title}`,
+          text: getInstagramCaptionText(instagramShareSession, settings.unit),
+        });
+        setShareSuccessToast('¡Listo! Selecciona Instagram en el menú de compartir.');
+        setTimeout(() => setShareSuccessToast(null), 4000);
+        return;
+      }
+
+      // Si el navegador no permite compartir archivos directamente (ej: escritorio)
+      handleDownloadStoryImage();
+      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit));
+      setCopyCaptionSuccess(true);
+      setShareSuccessToast('¡Imagen descargada y texto copiado! Ya puedes subirla a tus Stories o Feed de Instagram.');
+      setTimeout(() => setShareSuccessToast(null), 4500);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        handleDownloadStoryImage();
+      }
+    } finally {
+      setIsSharingInstagram(false);
+    }
+  };
+
+  const handleDownloadStoryImage = () => {
+    if (!instagramCanvasRef.current || !instagramShareSession) return;
+    instagramCanvasRef.current.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gimy360_story_${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShareSuccessToast('¡Imagen de Story guardada en tu galería!');
+      setTimeout(() => setShareSuccessToast(null), 3500);
+    }, 'image/png');
+  };
+
+  const handleCopyInstagramCaption = async () => {
+    if (!instagramShareSession) return;
+    try {
+      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit));
+      setCopyCaptionSuccess(true);
+      setTimeout(() => setCopyCaptionSuccess(false), 3000);
+    } catch (err) {
+      console.warn('Error copying to clipboard:', err);
+    }
+  };
+
+  /* ==========================================================================
      CREACIÓN DE EJERCICIO PERSONALIZADO
      ========================================================================== */
 
@@ -1913,6 +2333,36 @@ export default function App() {
     });
     return { totalVolume, totalSets, totalExercises: session.exercises.length };
   };
+
+  // Ejercicios con algún registro de actividad en el historial
+  // Ordenados idéntico a la vista de "Añadir Ejercicio": 1º Tipo (Pecho, Hombro...), 2º Material (Barra, Corporal...), 3º Alfabético
+  const exercisesWithHistory = useMemo(() => {
+    const activeIds = new Set<string>();
+    history.forEach((session) => {
+      session.exercises.forEach((ex) => {
+        // Se considera actividad si hay al menos una serie completada o con peso/reps registradas
+        const hasActivity =
+          ex.sets.some((s) => s.completed || (s.weight > 0 && s.reps > 0) || s.reps > 0) ||
+          ex.sets.length > 0;
+        if (hasActivity) {
+          activeIds.add(ex.exerciseId);
+        }
+      });
+    });
+
+    const activeList = exercises.filter((ex) => activeIds.has(ex.id));
+    return sortExercisesByTypeMaterialName(activeList);
+  }, [exercises, history]);
+
+  // Sincronizar el selector de progresión con los ejercicios que tienen historial
+  useEffect(() => {
+    if (exercisesWithHistory.length > 0) {
+      const isCurrentValid = exercisesWithHistory.some((e) => e.id === selectedHistoryExerciseId);
+      if (!isCurrentValid) {
+        setSelectedHistoryExerciseId(exercisesWithHistory[0].id);
+      }
+    }
+  }, [exercisesWithHistory, selectedHistoryExerciseId]);
 
   // Calcular progresión y récords para un ejercicio en particular
   const exerciseProgressData = useMemo(() => {
@@ -3259,13 +3709,20 @@ export default function App() {
 
                         {/* Botón ver evolución en gráfico */}
                         <button
+                          disabled={best1RM === 0}
                           onClick={() => {
-                            setSelectedHistoryExerciseId(exercise.id);
-                            setHistorySubTab('progreso');
-                            setActiveTab('historial');
+                            if (best1RM > 0) {
+                              setSelectedHistoryExerciseId(exercise.id);
+                              setHistorySubTab('progreso');
+                              setActiveTab('historial');
+                            }
                           }}
-                          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 transition"
-                          title="Ver progresión de este ejercicio"
+                          className={`p-2 rounded-lg transition ${
+                            best1RM > 0
+                              ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 cursor-pointer'
+                              : 'bg-slate-900 text-slate-600 opacity-30 cursor-not-allowed'
+                          }`}
+                          title={best1RM > 0 ? 'Ver progresión de este ejercicio' : 'Sin registros de actividad todavía'}
                         >
                           <TrendingUp className="w-4 h-4 text-emerald-400" />
                         </button>
@@ -3432,12 +3889,22 @@ export default function App() {
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <h5 className="text-sm font-black text-white">{session.title}</h5>
-                                <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5 font-mono-numbers">
+                                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 mt-0.5 font-mono-numbers">
                                   <span>⏱ {formatTime(session.durationSeconds)}</span>
                                   <span>📦 {metrics.totalVolume.toLocaleString()} {settings.unit}</span>
                                   <span>🔥 {metrics.totalSets} series</span>
                                 </div>
                               </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenInstagramShare(session)}
+                                className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-amber-500/20 text-pink-300 border border-pink-500/30 hover:border-pink-400 hover:text-white active:scale-95 transition flex items-center gap-1.5 text-[11px] font-bold shrink-0"
+                                title="Publicar este entreno en Instagram Stories"
+                              >
+                                <InstagramIcon className="w-3.5 h-3.5 fill-current" />
+                                <span className="hidden sm:inline">Instagram</span>
+                              </button>
                             </div>
 
                             {/* Desglose de ejercicios y mejores marcas */}
@@ -3475,26 +3942,45 @@ export default function App() {
 
             {/* VISTA 2: PROGRESO DE CARGA Y 1RM ESTIMADA (EPLEY) */}
             {historySubTab === 'progreso' && (
-              <div className="space-y-4">
-                {/* Selector de Ejercicio para analizar */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                    Selecciona Ejercicio para Medir Progresión:
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={selectedHistoryExerciseId}
-                      onChange={(e) => setSelectedHistoryExerciseId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl px-3 py-2.5 appearance-none focus:outline-none focus:border-emerald-500"
-                    >
-                      {exercises.map((ex) => (
-                        <option key={ex.id} value={ex.id}>
-                          {ex.name} ({getMuscleBadge(ex.muscle)})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              exercisesWithHistory.length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
+                    <TrendingUp className="w-6 h-6" />
                   </div>
+                  <h4 className="text-sm font-extrabold text-white">Sin registros de actividad todavía</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                    Completa y finaliza tu primer entrenamiento para que aparezcan aquí los ejercicios con registros y puedas analizar su progresión de cargas y 1RM estimada.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Selector de Ejercicio para analizar */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        Selecciona Ejercicio para Medir Progresión:
+                      </label>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        {exercisesWithHistory.length} con registro
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <select
+                        value={selectedHistoryExerciseId}
+                        onChange={(e) => setSelectedHistoryExerciseId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl px-3 py-2.5 appearance-none focus:outline-none focus:border-emerald-500"
+                      >
+                        {exercisesWithHistory.map((ex) => {
+                          const badge = getEquipmentBadge(ex.equipment);
+                          return (
+                            <option key={ex.id} value={ex.id}>
+                              {ex.name} ({getMuscleBadge(ex.muscle)} • {badge.label})
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
 
                   {/* Resumen de Récords Personales (PRs) */}
                   {exerciseProgressData && (
@@ -3678,6 +4164,7 @@ export default function App() {
                   </div>
                 )}
               </div>
+              )
             )}
           </div>
         )}
@@ -4444,15 +4931,172 @@ export default function App() {
               Gran trabajo de sobrecarga. Tus cargas han sido registradas en tu historial y calendario para proyectar tu 1RM.
             </p>
 
-            <button
-              onClick={() => {
-                setShowFinishModal(null);
-                setActiveTab('historial');
-              }}
-              className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition"
-            >
-              Ver en Historial & Calendario
-            </button>
+            <div className="space-y-2 pt-1">
+              {/* Botón de Publicar en Instagram Stories */}
+              <button
+                type="button"
+                onClick={() => handleOpenInstagramShare(showFinishModal)}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-pink-500/25 active:scale-95 transition flex items-center justify-center gap-2"
+              >
+                <InstagramIcon className="w-4 h-4 fill-current" />
+                <span>Publicar en Instagram Stories</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFinishModal(null);
+                  setActiveTab('historial');
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+              >
+                Ver en Historial & Calendario
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: PUBLICAR EN INSTAGRAM STORIES (STORY CARD GENERATOR)
+          ========================================================================== */}
+      {instagramShareSession && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[95vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header del Modal */}
+            <div className="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-600 to-amber-500 text-white flex items-center justify-center shadow-md shadow-pink-500/20">
+                  <InstagramIcon className="w-4 h-4 fill-current" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">Publicar en Instagram</h3>
+                  <span className="text-[11px] text-slate-400">Tarjeta de Story en formato 9:16</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInstagramShareSession(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido con scroll: Preview de Canvas + Selector de Tema */}
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-3.5 flex-1 flex flex-col items-center">
+              {/* Selector de Tema Visual */}
+              <div className="w-full flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInstagramTheme('sunset')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                    instagramTheme === 'sunset'
+                      ? 'bg-gradient-to-r from-purple-950 to-pink-950 border-pink-500 text-pink-300 shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-purple-500 to-amber-400"></span>
+                  <span>Atardecer</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInstagramTheme('emerald')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                    instagramTheme === 'emerald'
+                      ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                  <span>Esmeralda</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInstagramTheme('cyan')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                    instagramTheme === 'cyan'
+                      ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                  <span>Cyber Cyan</span>
+                </button>
+              </div>
+
+              {/* Vista Previa del Canvas en Formato 9:16 */}
+              <div className="relative group max-w-full flex justify-center py-1">
+                <canvas
+                  ref={instagramCanvasRef}
+                  className="rounded-2xl shadow-2xl border border-slate-800 max-h-[46vh] sm:max-h-[52vh] w-auto aspect-[9/16] object-contain transition-transform group-hover:scale-[1.01]"
+                />
+              </div>
+
+              {/* Toast de confirmación si existe */}
+              {shareSuccessToast && (
+                <div className="w-full p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs text-center font-bold animate-in fade-in">
+                  {shareSuccessToast}
+                </div>
+              )}
+            </div>
+
+            {/* Acciones de Publicación y Descarga */}
+            <div className="p-3.5 sm:p-4 border-t border-slate-800 bg-slate-950/70 space-y-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleShareToInstagram}
+                disabled={isSharingInstagram}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:opacity-95 disabled:opacity-50 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-pink-500/25 active:scale-95 transition flex items-center justify-center gap-2"
+              >
+                <InstagramIcon className="w-4 h-4 fill-current" />
+                <span>{isSharingInstagram ? 'Preparando Story...' : 'Compartir en Instagram Stories'}</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadStoryImage}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition border border-slate-700"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Guardar Imagen</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyInstagramCaption}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition border border-slate-700"
+                >
+                  {copyCaptionSuccess ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                      <span className="text-emerald-400">¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-cyan-400" />
+                      <span>Copiar Texto</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Enlace directo para abrir la app de Instagram */}
+              <div className="pt-1 text-center">
+                <a
+                  href="https://instagram.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-slate-400 hover:text-pink-400 inline-flex items-center gap-1 transition"
+                >
+                  <span>Abrir Instagram</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}
