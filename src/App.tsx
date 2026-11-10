@@ -50,8 +50,15 @@ import {
   RefreshCw,
   Share2,
   Camera,
-  ExternalLink
+  ExternalLink,
+  Globe
 } from 'lucide-react';
+import {
+  Language,
+  TRANSLATIONS,
+  getExerciseName,
+  EXERCISE_EN_NAMES
+} from './i18n';
 
 /* ==========================================================================
    TIPOS DE DATOS Y MODELOS
@@ -73,6 +80,58 @@ export const DAYS_OF_WEEK: { key: DayOfWeek; label: string; short: string; order
   { key: 'domingo', label: 'Domingo', short: 'DOM', order: 7 },
   { key: 'ninguno', label: 'Sin día fijo', short: '—', order: 8 },
 ];
+
+export function getDayLabel(day?: DayOfWeek, lang: Language = 'es'): string {
+  if (!day || day === 'ninguno') return lang === 'en' ? 'Flexible Day' : 'Sin día fijo';
+  const enDays: Record<DayOfWeek, string> = {
+    lunes: 'Monday',
+    martes: 'Tuesday',
+    miercoles: 'Wednesday',
+    jueves: 'Thursday',
+    viernes: 'Friday',
+    sabado: 'Saturday',
+    domingo: 'Sunday',
+    ninguno: 'Flexible Day'
+  };
+  if (lang === 'en') return enDays[day] || day;
+  const esDays: Record<DayOfWeek, string> = {
+    lunes: 'Lunes',
+    martes: 'Martes',
+    miercoles: 'Miércoles',
+    jueves: 'Jueves',
+    viernes: 'Viernes',
+    sabado: 'Sábado',
+    domingo: 'Domingo',
+    ninguno: 'Sin día fijo'
+  };
+  return esDays[day] || day;
+}
+
+export function getDayShort(day?: DayOfWeek, lang: Language = 'es'): string {
+  if (!day || day === 'ninguno') return '—';
+  const enShort: Record<DayOfWeek, string> = {
+    lunes: 'MON',
+    martes: 'TUE',
+    miercoles: 'WED',
+    jueves: 'THU',
+    viernes: 'FRI',
+    sabado: 'SAT',
+    domingo: 'SUN',
+    ninguno: '—'
+  };
+  if (lang === 'en') return enShort[day] || day;
+  const esShort: Record<DayOfWeek, string> = {
+    lunes: 'LUN',
+    martes: 'MAR',
+    miercoles: 'MIÉ',
+    jueves: 'JUE',
+    viernes: 'VIE',
+    sabado: 'SÁB',
+    domingo: 'DOM',
+    ninguno: '—'
+  };
+  return esShort[day] || day;
+}
 
 export type SetType = 'N' | 'W' | 'F' | 'D'; // Normal, Warmup (Calentamiento), Failure (Fallo), Drop-set
 
@@ -128,6 +187,7 @@ export interface AppSettings {
   soundEnabled: boolean;
   vibrateEnabled: boolean;
   theme?: 'dark' | 'light';
+  language?: Language;
 }
 
 /* ==========================================================================
@@ -794,7 +854,8 @@ export interface ProgressiveOverloadFeedback {
 export function getProgressiveOverloadFeedback(
   exerciseId: string,
   history: WorkoutSession[],
-  unit: 'kg' | 'lb'
+  unit: 'kg' | 'lb',
+  lang: Language = 'es'
 ): ProgressiveOverloadFeedback {
   for (const session of history) {
     const match = session.exercises.find((e) => e.exerciseId === exerciseId);
@@ -804,14 +865,23 @@ export function getProgressiveOverloadFeedback(
         const maxWeight = Math.max(...completedSets.map((s) => s.weight));
         const avgReps = Math.round(completedSets.reduce((sum, s) => sum + s.reps, 0) / completedSets.length);
         const shouldIncrease = avgReps >= 8 && maxWeight > 0;
-        const incText = unit === 'kg' ? '+2.5 kg o +1 rep' : '+5 lb o +1 rep';
+        const incText = unit === 'kg' ? (lang === 'en' ? '+2.5 kg or +1 rep' : '+2.5 kg o +1 rep') : (lang === 'en' ? '+5 lb or +1 rep' : '+5 lb o +1 rep');
+
+        let message = '';
+        if (lang === 'en') {
+          message = shouldIncrease
+            ? `💡 Suggestion: Last session you completed ${completedSets.length} sets at ${maxWeight} ${unit} × ${avgReps} reps. Try ${incText} today!`
+            : `🎯 Previous record: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} sets). Maintain strict form before increasing load.`;
+        } else {
+          message = shouldIncrease
+            ? `💡 Sugerencia: En tu última sesión completaste ${completedSets.length} series a ${maxWeight} ${unit} × ${avgReps} reps. ¡Intenta ${incText} hoy!`
+            : `🎯 Marca anterior: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} series). Consolida la técnica antes de aumentar peso.`;
+        }
 
         return {
           hasHistory: true,
           shouldIncrease,
-          message: shouldIncrease
-            ? `💡 Sugerencia: En tu última sesión completaste ${completedSets.length} series a ${maxWeight} ${unit} × ${avgReps} reps. ¡Intenta ${incText} hoy!`
-            : `🎯 Marca anterior: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} series). Consolida la técnica antes de aumentar peso.`,
+          message,
           previousWeight: maxWeight,
           previousReps: avgReps,
           completedSetsCount: completedSets.length,
@@ -822,7 +892,9 @@ export function getProgressiveOverloadFeedback(
   return {
     hasHistory: false,
     shouldIncrease: false,
-    message: '🎯 Primera vez con este ejercicio: calibra un peso moderado para dominar la técnica.',
+    message: lang === 'en'
+      ? '🎯 First time with this exercise: calibrate a moderate weight to master proper form.'
+      : '🎯 Primera vez con este ejercicio: calibra un peso moderado para dominar la técnica.',
     previousWeight: 0,
     previousReps: 0,
     completedSetsCount: 0,
@@ -832,11 +904,6 @@ export function getProgressiveOverloadFeedback(
 /* ==========================================================================
    UTILIDADES & HELPERS
    ========================================================================== */
-
-export function getDayLabel(day?: DayOfWeek): string {
-  const found = DAYS_OF_WEEK.find((d) => d.key === day);
-  return found ? found.label : 'Sin día fijo';
-}
 
 export function getDayBadgeStyle(day?: DayOfWeek): { bg: string; text: string; border: string } {
   switch (day) {
@@ -947,32 +1014,34 @@ function formatTime(totalSeconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Icono según equipamiento
-function getEquipmentBadge(equipment: Equipment) {
+// Icono según equipamiento (con soporte para ES / EN UK)
+function getEquipmentBadge(equipment: Equipment, lang: Language = 'es') {
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.es;
   switch (equipment) {
     case 'barra':
-      return { label: 'Barra', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
+      return { label: t.equipBarbell, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
     case 'mancuerna':
-      return { label: 'Mancuerna', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
+      return { label: t.equipDumbbell, color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
     case 'polea':
-      return { label: 'Polea / Cable', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+      return { label: t.equipCable, color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
     case 'smith':
-      return { label: 'Smith / Multi', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
+      return { label: t.equipSmith, color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
     case 'maquina':
-      return { label: 'Máquina', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+      return { label: t.equipMachine, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
     case 'corporal':
-      return { label: 'Corporal', color: 'bg-pink-500/10 text-pink-400 border-pink-500/20' };
+      return { label: t.equipBodyweight, color: 'bg-pink-500/10 text-pink-400 border-pink-500/20' };
   }
 }
 
-function getMuscleBadge(muscle: MuscleGroup) {
+function getMuscleBadge(muscle: MuscleGroup, lang: Language = 'es') {
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.es;
   const map: Record<MuscleGroup, string> = {
-    pecho: 'Pecho',
-    espalda: 'Espalda',
-    piernas: 'Piernas',
-    hombro: 'Hombro',
-    brazos: 'Brazos',
-    core: 'Core',
+    pecho: t.muscleChest,
+    espalda: t.muscleBack,
+    piernas: t.muscleLegs,
+    hombro: t.muscleShoulders,
+    brazos: t.muscleArms,
+    core: t.muscleCore,
   };
   return map[muscle] || muscle;
 }
@@ -988,7 +1057,8 @@ export const MUSCLE_SORT_ORDER: Record<MuscleGroup, number> = {
 };
 
 // Ordenar ejercicios jerárquicamente: 1º por Tipo, 2º por Material (Barra, Corporal...) y 3º Alfabéticamente por Nombre
-export function sortExercisesByTypeMaterialName(list: Exercise[]): Exercise[] {
+export function sortExercisesByTypeMaterialName(list: Exercise[], lang: Language = 'es'): Exercise[] {
+  const locale = lang === 'en' ? 'en-GB' : 'es';
   return [...list].sort((a, b) => {
     // 1. Por tipo (Pecho, hombros, etc.)
     const orderA = MUSCLE_SORT_ORDER[a.muscle] ?? 99;
@@ -998,15 +1068,17 @@ export function sortExercisesByTypeMaterialName(list: Exercise[]): Exercise[] {
     }
 
     // 2. Por material (Barra, Corporal, Mancuerna, Máquina, Polea / Cable, Smith / Multi)
-    const eqLabelA = getEquipmentBadge(a.equipment).label;
-    const eqLabelB = getEquipmentBadge(b.equipment).label;
-    const eqDiff = eqLabelA.localeCompare(eqLabelB, 'es', { sensitivity: 'base' });
+    const eqLabelA = getEquipmentBadge(a.equipment, lang).label;
+    const eqLabelB = getEquipmentBadge(b.equipment, lang).label;
+    const eqDiff = eqLabelA.localeCompare(eqLabelB, locale, { sensitivity: 'base' });
     if (eqDiff !== 0) {
       return eqDiff;
     }
 
-    // 3. Alfabéticamente por nombre
-    return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+    // 3. Alfabéticamente por nombre localizado
+    const nameA = getExerciseName(a, lang);
+    const nameB = getExerciseName(b, lang);
+    return nameA.localeCompare(nameB, locale, { sensitivity: 'base' });
   });
 }
 
@@ -1127,7 +1199,7 @@ function drawRoundedRect(
 
 export type InstagramStoryTheme = 'sunset' | 'emerald' | 'cyan';
 
-export function getInstagramCaptionText(session: WorkoutSession, unit: string): string {
+export function getInstagramCaptionText(session: WorkoutSession, unit: string, lang: Language = 'es'): string {
   let totalVol = 0;
   let totalSets = 0;
   session.exercises.forEach((ex) => {
@@ -1138,6 +1210,17 @@ export function getInstagramCaptionText(session: WorkoutSession, unit: string): 
       }
     });
   });
+
+  if (lang === 'en') {
+    return `🏋️ Workout completed in Gimy360! 💪
+
+🔥 ${session.title}
+⏱️ Time: ${formatTime(session.durationSeconds)}
+📦 Total Volume: ${totalVol.toLocaleString()} ${unit}
+⚡ Completed Sets: ${totalSets}
+
+#Gimy360 #Fitness #Workout #GymProgress #ProgressiveOverload #StrengthTraining #GymLife`;
+  }
 
   return `🏋️ ¡Entrenamiento completado en Gimy360! 💪
 
@@ -1154,7 +1237,8 @@ export function renderInstagramStoryCanvas(
   session: WorkoutSession,
   exercisesList: Exercise[],
   unit: string,
-  theme: InstagramStoryTheme
+  theme: InstagramStoryTheme,
+  lang: Language = 'es'
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -1235,7 +1319,7 @@ export function renderInstagramStoryCanvas(
   ctx.fillText('WORKOUT & LOAD PROGRESSION', 100, 180);
 
   // Badge de fecha en esquina superior derecha
-  const dateFormatted = new Date(session.startTime).toLocaleDateString('es-ES', {
+  const dateFormatted = new Date(session.startTime).toLocaleDateString(lang === 'en' ? 'en-GB' : 'es-ES', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -1255,7 +1339,7 @@ export function renderInstagramStoryCanvas(
   // 2. Título de la Sesión y Badge de Estado
   ctx.fillStyle = primaryAccent;
   ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('⚡ SESIÓN COMPLETADA', 100, 280);
+  ctx.fillText(lang === 'en' ? '⚡ WORKOUT COMPLETED' : '⚡ SESIÓN COMPLETADA', 100, 280);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 64px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -1286,9 +1370,9 @@ export function renderInstagramStoryCanvas(
   const statGap = 20;
 
   const stats = [
-    { label: 'TIEMPO', val: formatTime(session.durationSeconds), sub: 'duración activa', color: '#ffffff' },
-    { label: 'VOLUMEN', val: `${totalVol.toLocaleString()} ${unit}`, sub: 'tonelaje total', color: primaryAccent },
-    { label: 'SERIES', val: `${totalSets}`, sub: 'series logradas', color: secondaryAccent },
+    { label: lang === 'en' ? 'TIME' : 'TIEMPO', val: formatTime(session.durationSeconds), sub: lang === 'en' ? 'active duration' : 'duración activa', color: '#ffffff' },
+    { label: lang === 'en' ? 'VOLUME' : 'VOLUMEN', val: `${totalVol.toLocaleString()} ${unit}`, sub: lang === 'en' ? 'total volume' : 'tonelaje total', color: primaryAccent },
+    { label: lang === 'en' ? 'SETS' : 'SERIES', val: `${totalSets}`, sub: lang === 'en' ? 'completed sets' : 'series logradas', color: secondaryAccent },
   ];
 
   stats.forEach((st, i) => {
@@ -1316,7 +1400,7 @@ export function renderInstagramStoryCanvas(
   // 4. Sección de Ejercicios y Marcas
   ctx.fillStyle = '#f8fafc';
   ctx.font = '900 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('EJERCICIOS DESTACADOS Y CARGAS', 100, 665);
+  ctx.fillText(lang === 'en' ? 'KEY EXERCISES & LOADS' : 'EJERCICIOS DESTACADOS Y CARGAS', 100, 665);
 
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
   ctx.beginPath();
@@ -1353,10 +1437,10 @@ export function renderInstagramStoryCanvas(
     ctx.fillText(`${idx + 1}`, 149, currentY + 63);
     ctx.textAlign = 'left';
 
-    // Nombre de Ejercicio
+    // Nombre de Ejercicio (traducido según lang)
     ctx.fillStyle = '#ffffff';
     ctx.font = '800 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    let exName = exInfo?.name || 'Ejercicio';
+    let exName = exInfo ? getExerciseName(exInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
     if (ctx.measureText(exName).width > 470) {
       while (ctx.measureText(exName + '...').width > 470 && exName.length > 0) {
         exName = exName.slice(0, -1);
@@ -1368,7 +1452,7 @@ export function renderInstagramStoryCanvas(
     // Etiqueta de Material y Músculo
     ctx.fillStyle = '#94a3b8';
     ctx.font = '700 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    const tag = `${exInfo?.equipment ? exInfo.equipment.toUpperCase() : 'EQUIPO'} • ${exInfo?.muscle ? exInfo.muscle.toUpperCase() : 'MÚSCULO'}`;
+    const tag = `${exInfo?.equipment ? getEquipmentBadge(exInfo.equipment, lang).label.toUpperCase() : 'EQUIP'} • ${exInfo?.muscle ? getMuscleBadge(exInfo.muscle, lang).toUpperCase() : 'MUSCLE'}`;
     ctx.fillText(tag, 195, currentY + 102);
 
     // Columna Derecha: Mejor Marca (Max Weight)
@@ -1379,7 +1463,7 @@ export function renderInstagramStoryCanvas(
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '700 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(`${bestSet?.reps || 0} reps • ${completedSets.length} series`, W - 130, currentY + 102);
+    ctx.fillText(`${bestSet?.reps || 0} reps • ${completedSets.length} ${lang === 'en' ? 'sets' : 'series'}`, W - 130, currentY + 102);
     ctx.textAlign = 'left';
 
     currentY += cardH + 18;
@@ -1464,7 +1548,7 @@ export default function App() {
     }
   });
 
-  // Ajustes de la App (Modo Oscuro por defecto)
+  // Ajustes de la App (Modo Oscuro por defecto, idioma ES por defecto)
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('gimy360_settings');
     if (saved) {
@@ -1476,6 +1560,7 @@ export default function App() {
           soundEnabled: parsed.soundEnabled ?? true,
           vibrateEnabled: parsed.vibrateEnabled ?? true,
           theme: parsed.theme || 'dark',
+          language: parsed.language || 'es',
         };
       } catch {
         // Fallback si el json guardado estuviera corrupto
@@ -1487,8 +1572,13 @@ export default function App() {
       soundEnabled: true,
       vibrateEnabled: true,
       theme: 'dark',
+      language: 'es',
     };
   });
+
+  // Idioma activo ('es' o 'en' UK) y diccionario de traducciones
+  const lang: Language = settings.language || 'es';
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.es;
 
   // Sesión de entrenamiento activa (si hay una en curso)
   const [activeWorkout, setActiveWorkout] = useState<{
@@ -2089,10 +2179,11 @@ export default function App() {
         instagramShareSession,
         exercises,
         settings.unit,
-        instagramTheme
+        instagramTheme,
+        lang
       );
     }
-  }, [instagramShareSession, instagramTheme, exercises, settings.unit]);
+  }, [instagramShareSession, instagramTheme, exercises, settings.unit, lang]);
 
   const handleShareToInstagram = async () => {
     if (!instagramCanvasRef.current || !instagramShareSession) return;
@@ -2101,7 +2192,7 @@ export default function App() {
       const blob = await new Promise<Blob | null>((resolve) =>
         instagramCanvasRef.current?.toBlob(resolve, 'image/png')
       );
-      if (!blob) throw new Error('No se pudo generar la imagen');
+      if (!blob) throw new Error(lang === 'en' ? 'Could not generate story image' : 'No se pudo generar la imagen');
 
       const file = new File([blob], `gimy360_story_${Date.now()}.png`, { type: 'image/png' });
 
@@ -2109,18 +2200,26 @@ export default function App() {
         await navigator.share({
           files: [file],
           title: `Gimy360 - ${instagramShareSession.title}`,
-          text: getInstagramCaptionText(instagramShareSession, settings.unit),
+          text: getInstagramCaptionText(instagramShareSession, settings.unit, lang),
         });
-        setShareSuccessToast('¡Listo! Selecciona Instagram en el menú de compartir.');
+        setShareSuccessToast(
+          lang === 'en'
+            ? 'Ready! Select Instagram in the share sheet.'
+            : '¡Listo! Selecciona Instagram en el menú de compartir.'
+        );
         setTimeout(() => setShareSuccessToast(null), 4000);
         return;
       }
 
       // Si el navegador no permite compartir archivos directamente (ej: escritorio)
       handleDownloadStoryImage();
-      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit));
+      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit, lang));
       setCopyCaptionSuccess(true);
-      setShareSuccessToast('¡Imagen descargada y texto copiado! Ya puedes subirla a tus Stories o Feed de Instagram.');
+      setShareSuccessToast(
+        lang === 'en'
+          ? 'Image downloaded & caption copied! You can now share it to your Instagram Stories or Feed.'
+          : '¡Imagen descargada y texto copiado! Ya puedes subirla a tus Stories o Feed de Instagram.'
+      );
       setTimeout(() => setShareSuccessToast(null), 4500);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -2141,7 +2240,11 @@ export default function App() {
       a.download = `gimy360_story_${Date.now()}.png`;
       a.click();
       URL.revokeObjectURL(url);
-      setShareSuccessToast('¡Imagen de Story guardada en tu galería!');
+      setShareSuccessToast(
+        lang === 'en'
+          ? 'Story image saved to your downloads!'
+          : '¡Imagen de Story guardada en tu galería!'
+      );
       setTimeout(() => setShareSuccessToast(null), 3500);
     }, 'image/png');
   };
@@ -2149,7 +2252,7 @@ export default function App() {
   const handleCopyInstagramCaption = async () => {
     if (!instagramShareSession) return;
     try {
-      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit));
+      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit, lang));
       setCopyCaptionSuccess(true);
       setTimeout(() => setCopyCaptionSuccess(false), 3000);
     } catch (err) {
@@ -2351,8 +2454,8 @@ export default function App() {
     });
 
     const activeList = exercises.filter((ex) => activeIds.has(ex.id));
-    return sortExercisesByTypeMaterialName(activeList);
-  }, [exercises, history]);
+    return sortExercisesByTypeMaterialName(activeList, lang);
+  }, [exercises, history, lang]);
 
   // Sincronizar el selector de progresión con los ejercicios que tienen historial
   useEffect(() => {
@@ -2538,13 +2641,15 @@ export default function App() {
 
   // Filtrado y ordenación jerárquica de ejercicios (1º Tipo, 2º Material, 3º Alfabético)
   const filteredExercises = useMemo(() => {
+    const q = searchExerciseQuery.toLowerCase().trim();
     const list = exercises.filter((ex) => {
-      const matchesSearch = ex.name.toLowerCase().includes(searchExerciseQuery.toLowerCase());
+      const localizedName = getExerciseName(ex, lang).toLowerCase();
+      const matchesSearch = localizedName.includes(q) || ex.name.toLowerCase().includes(q);
       const matchesMuscle = selectedMuscleFilter === 'todos' || ex.muscle === selectedMuscleFilter;
       return matchesSearch && matchesMuscle;
     });
-    return sortExercisesByTypeMaterialName(list);
-  }, [exercises, searchExerciseQuery, selectedMuscleFilter]);
+    return sortExercisesByTypeMaterialName(list, lang);
+  }, [exercises, searchExerciseQuery, selectedMuscleFilter, lang]);
 
   return (
     <div
@@ -2568,22 +2673,42 @@ export default function App() {
               GIMY<span className="text-emerald-400">360</span>
             </h1>
             <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
-              {activeWorkout ? 'Entreno en Curso' : 'Workout & Load Progress'}
+              {activeWorkout ? t.appSubtitleActive : t.appSubtitle}
             </span>
           </div>
         </div>
 
-        {/* Indicador de entreno activo si no estamos en la pestaña de entreno */}
-        {activeWorkout && activeTab !== 'entreno' && (
+        <div className="flex items-center gap-2">
+          {/* Botón rápido selector de idioma (ES / EN UK) */}
           <button
-            onClick={() => setActiveTab('entreno')}
-            className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full animate-pulse active:scale-95 transition"
+            type="button"
+            onClick={() =>
+              setSettings((prev) => ({
+                ...prev,
+                language: prev.language === 'en' ? 'es' : 'en',
+              }))
+            }
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-emerald-500/40 text-xs font-bold text-slate-300 hover:text-white transition active:scale-95 shadow-sm"
+            title={lang === 'en' ? 'Switch to Spanish 🇪🇸' : 'Cambiar a English (UK) 🇬🇧'}
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="font-mono-numbers">{formatTime(elapsedWorkoutSeconds)}</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <span>{lang === 'en' ? '🇬🇧' : '🇪🇸'}</span>
+            <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400">
+              {lang === 'en' ? 'EN' : 'ES'}
+            </span>
           </button>
-        )}
+
+          {/* Indicador de entreno activo si no estamos en la pestaña de entreno */}
+          {activeWorkout && activeTab !== 'entreno' && (
+            <button
+              onClick={() => setActiveTab('entreno')}
+              className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full animate-pulse active:scale-95 transition"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="font-mono-numbers">{formatTime(elapsedWorkoutSeconds)}</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </header>
 
       {/* ==========================================================================
@@ -2607,7 +2732,7 @@ export default function App() {
                   className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 px-3 py-2 rounded-xl active:scale-95 transition"
                 >
                   <ArrowLeft className="w-4 h-4 text-emerald-400" />
-                  <span>Volver a Rutinas</span>
+                  <span>{lang === 'en' ? 'Back to Routines' : 'Volver a Rutinas'}</span>
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -2616,7 +2741,7 @@ export default function App() {
                     onClick={closeRoutineEditor}
                     className="text-xs text-slate-400 hover:text-slate-200 px-3 py-2 rounded-xl transition"
                   >
-                    Cancelar
+                    {t.cancel}
                   </button>
                   <button
                     type="button"
@@ -2625,7 +2750,7 @@ export default function App() {
                     className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl uppercase tracking-wider shadow-md shadow-emerald-500/20 active:scale-95 transition"
                   >
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>{editingRoutine ? 'Guardar' : 'Crear'}</span>
+                    <span>{editingRoutine ? t.save : (lang === 'en' ? 'Create' : 'Crear')}</span>
                   </button>
                 </div>
               </div>
@@ -2634,19 +2759,19 @@ export default function App() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {editingRoutine ? 'Modo Edición' : 'Nueva Rutina'}
+                    {editingRoutine ? (lang === 'en' ? 'Edit Mode' : 'Modo Edición') : (lang === 'en' ? 'New Routine' : 'Nueva Rutina')}
                   </span>
                   <span className="text-xs text-slate-500">
-                    {selectedExIdsForRoutine.length} {selectedExIdsForRoutine.length === 1 ? 'ejercicio seleccionado' : 'ejercicios seleccionados'}
+                    {selectedExIdsForRoutine.length} {lang === 'en' ? (selectedExIdsForRoutine.length === 1 ? 'exercise selected' : 'exercises selected') : (selectedExIdsForRoutine.length === 1 ? 'ejercicio seleccionado' : 'ejercicios seleccionados')}
                   </span>
                 </div>
                 <h2 className="text-xl font-black text-white tracking-tight">
-                  {editingRoutine ? 'Editar Rutina' : 'Diseñar Nueva Rutina'}
+                  {editingRoutine ? t.editRoutineTitle : t.createRoutineTitle}
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {editingRoutine
-                    ? 'Añade o quita ejercicios, modifica el día asignado o ajusta el nombre y categoría.'
-                    : 'Configura el nombre, el día de la semana y selecciona los ejercicios que componen este entrenamiento.'}
+                    ? (lang === 'en' ? 'Add or remove exercises, update assigned day, or adjust title and category.' : 'Añade o quita ejercicios, modifica el día asignado o ajusta el nombre y categoría.')
+                    : (lang === 'en' ? 'Set the routine name, day of the week, and select the exercises for this workout.' : 'Configura el nombre, el día de la semana y selecciona los ejercicios que componen este entrenamiento.')}
                 </p>
               </div>
 
@@ -2656,17 +2781,17 @@ export default function App() {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-emerald-400" />
-                    1. Información Básica
+                    1. {lang === 'en' ? 'Basic Information' : 'Información Básica'}
                   </h3>
 
                   <div>
                     <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                      Título de la Rutina <span className="text-emerald-400">*</span>
+                      {t.routineNameLabel} <span className="text-emerald-400">*</span>
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Ej: Torso Hipertrofia B, Pierna & Glúteos..."
+                      placeholder={lang === 'en' ? 'e.g. Upper Body Hypertrophy, Legs & Glutes...' : 'Ej: Torso Hipertrofia B, Pierna & Glúteos...'}
                       value={newRotTitle}
                       onChange={(e) => setNewRotTitle(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-sm font-semibold placeholder-slate-600 focus:outline-none transition"
@@ -2675,17 +2800,20 @@ export default function App() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">Categoría / Enfoque</label>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">{t.routineCategoryLabel}</label>
                       <input
                         type="text"
-                        placeholder="Ej: Empuje / Fuerza / Hipertrofia"
+                        placeholder={lang === 'en' ? 'e.g. Push / Strength / Hypertrophy' : 'Ej: Empuje / Fuerza / Hipertrofia'}
                         value={newRotCategory}
                         onChange={(e) => setNewRotCategory(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-xs sm:text-sm placeholder-slate-600 focus:outline-none transition"
                       />
                       {/* Chips de sugerencias rápidas */}
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {['Empuje', 'Tirón', 'Pierna', 'Torso', 'Full Body', 'Brazos', 'Core'].map((cat) => (
+                        {(lang === 'en'
+                          ? ['Push', 'Pull', 'Legs', 'Upper', 'Full Body', 'Arms', 'Core']
+                          : ['Empuje', 'Tirón', 'Pierna', 'Torso', 'Full Body', 'Brazos', 'Core']
+                        ).map((cat) => (
                           <button
                             key={cat}
                             type="button"
@@ -2703,10 +2831,10 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">Descripción o Notas</label>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">{t.routineDescLabel}</label>
                       <input
                         type="text"
-                        placeholder="Ej: 4 ejercicios de fuerza y accesorios"
+                        placeholder={lang === 'en' ? 'e.g. 4 main compound lifts and accessories' : 'Ej: 4 ejercicios de fuerza y accesorios'}
                         value={newRotDesc}
                         onChange={(e) => setNewRotDesc(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-xs sm:text-sm placeholder-slate-600 focus:outline-none transition"
@@ -2720,19 +2848,22 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                       <CalendarIcon className="w-4 h-4 text-emerald-400" />
-                      2. Asignar Día de la Semana
+                      2. {t.routineDayLabel}
                     </h3>
                     <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                      {getDayLabel(newRotDayOfWeek)}
+                      {getDayLabel(newRotDayOfWeek, lang)}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Las rutinas se ordenan por día de la semana para una navegación rápida e intuitiva.
+                    {lang === 'en'
+                      ? 'Routines are organized by day of the week for quick and structured workout access.'
+                      : 'Las rutinas se ordenan por día de la semana para una navegación rápida e intuitiva.'}
                   </p>
 
                   <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 pt-1">
                     {DAYS_OF_WEEK.map((d) => {
                       const isSelected = newRotDayOfWeek === d.key;
+                      const shortLabel = getDayShort(d.key, lang);
                       return (
                         <button
                           key={d.key}
@@ -2744,7 +2875,7 @@ export default function App() {
                               : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
                           }`}
                         >
-                          <span className="block">{d.short}</span>
+                          <span className="block">{shortLabel}</span>
                         </button>
                       );
                     })}
@@ -2756,7 +2887,7 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                       <Dumbbell className="w-4 h-4 text-emerald-400" />
-                      3. Ejercicios Incluidos ({selectedExIdsForRoutine.length})
+                      3. {lang === 'en' ? 'Included Exercises' : 'Ejercicios Incluidos'} ({selectedExIdsForRoutine.length})
                     </h3>
                     {selectedExIdsForRoutine.length > 0 && (
                       <button
@@ -2764,21 +2895,23 @@ export default function App() {
                         onClick={() => setSelectedExIdsForRoutine([])}
                         className="text-[11px] text-rose-400 hover:text-rose-300 font-bold transition hover:underline"
                       >
-                        Quitar todos
+                        {lang === 'en' ? 'Remove all' : 'Quitar todos'}
                       </button>
                     )}
                   </div>
 
                   {selectedExIdsForRoutine.length === 0 ? (
                     <div className="p-4 rounded-xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                      No has seleccionado ejercicios todavía. Elige al menos uno del catálogo inferior.
+                      {lang === 'en'
+                        ? 'No exercises selected yet. Choose at least one from the catalog below.'
+                        : 'No has seleccionado ejercicios todavía. Elige al menos uno del catálogo inferior.'}
                     </div>
                   ) : (
                     <div className="space-y-1.5">
                       {selectedExIdsForRoutine.map((exId, idx) => {
                         const ex = exercises.find((e) => e.id === exId);
                         if (!ex) return null;
-                        const badge = getEquipmentBadge(ex.equipment);
+                        const badge = getEquipmentBadge(ex.equipment, lang);
 
                         return (
                           <div
@@ -2790,12 +2923,12 @@ export default function App() {
                                 {idx + 1}
                               </span>
                               <div className="min-w-0">
-                                <span className="text-xs font-bold text-white block truncate">{ex.name}</span>
+                                <span className="text-xs font-bold text-white block truncate">{getExerciseName(ex, lang)}</span>
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                   <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
                                     {badge.label}
                                   </span>
-                                  <span className="text-[10px] text-slate-400 capitalize">{ex.muscle}</span>
+                                  <span className="text-[10px] text-slate-400 capitalize">{getMuscleBadge(ex.muscle, lang)}</span>
                                 </div>
                               </div>
                             </div>
@@ -2804,7 +2937,7 @@ export default function App() {
                               type="button"
                               onClick={() => setSelectedExIdsForRoutine((prev) => prev.filter((id) => id !== exId))}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-90 transition shrink-0"
-                              title="Quitar de la rutina"
+                              title={lang === 'en' ? 'Remove from routine' : 'Quitar de la rutina'}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2821,9 +2954,11 @@ export default function App() {
                     <div>
                       <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                         <Search className="w-4 h-4 text-emerald-400" />
-                        4. Catálogo de Ejercicios
+                        4. {t.catalogHeading}
                       </h3>
-                      <p className="text-xs text-slate-500">Toca cualquier ejercicio para seleccionarlo o deseleccionarlo</p>
+                      <p className="text-xs text-slate-500">
+                        {lang === 'en' ? 'Tap any exercise to select or deselect it' : 'Toca cualquier ejercicio para seleccionarlo o deseleccionarlo'}
+                      </p>
                     </div>
 
                     <button
@@ -2832,7 +2967,7 @@ export default function App() {
                       className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-slate-950 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl hover:bg-emerald-500/10 active:scale-95 transition"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Crear Ejercicio</span>
+                      <span>{t.newExerciseBtn}</span>
                     </button>
                   </div>
 
@@ -2841,7 +2976,7 @@ export default function App() {
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Buscar por nombre (ej: Press, Sentadilla, Curl...)"
+                      placeholder={t.searchExercisePlaceholder}
                       value={newRotSearchQuery}
                       onChange={(e) => setNewRotSearchQuery(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 pl-10 pr-9 py-2.5 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none transition"
@@ -2871,7 +3006,7 @@ export default function App() {
                               : 'bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-white'
                           }`}
                         >
-                          {m === 'todos' ? 'Todos' : getMuscleBadge(m)}
+                          {m === 'todos' ? t.all : getMuscleBadge(m, lang)}
                         </button>
                       )
                     )}
@@ -2881,13 +3016,17 @@ export default function App() {
                   <div className="space-y-2 pt-1">
                     {sortExercisesByTypeMaterialName(
                       exercises.filter((ex) => {
-                        const matchesSearch = ex.name.toLowerCase().includes(newRotSearchQuery.toLowerCase());
+                        const localizedName = getExerciseName(ex, lang).toLowerCase();
+                        const matchesSearch =
+                          localizedName.includes(newRotSearchQuery.toLowerCase()) ||
+                          ex.name.toLowerCase().includes(newRotSearchQuery.toLowerCase());
                         const matchesMuscle = newRotMuscleFilter === 'todos' || ex.muscle === newRotMuscleFilter;
                         return matchesSearch && matchesMuscle;
-                      })
+                      }),
+                      lang
                     ).map((ex) => {
                       const isSelected = selectedExIdsForRoutine.includes(ex.id);
-                      const badge = getEquipmentBadge(ex.equipment);
+                      const badge = getEquipmentBadge(ex.equipment, lang);
 
                       return (
                         <button
@@ -2907,27 +3046,27 @@ export default function App() {
                           }`}
                         >
                           <div className="min-w-0 pr-3 flex-1">
-                            <span className="text-sm font-bold block break-words text-slate-100">{ex.name}</span>
+                            <span className="text-sm font-bold block break-words text-slate-100">{getExerciseName(ex, lang)}</span>
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badge.color}`}>
                                 {badge.label}
                               </span>
-                              <span className="text-xs text-slate-400 capitalize">{getMuscleBadge(ex.muscle)}</span>
+                              <span className="text-xs text-slate-400 capitalize">{getMuscleBadge(ex.muscle, lang)}</span>
                             </div>
                           </div>
 
-                            <div
-                              className={`w-6 h-6 rounded-lg flex items-center justify-center border shrink-0 transition-colors ${
-                                isSelected
-                                  ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-md'
-                                  : 'border-slate-700 bg-slate-900'
-                              }`}
-                            >
-                              {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
-                            </div>
-                          </button>
-                        );
-                      })}
+                          <div
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center border shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-md'
+                                : 'border-slate-700 bg-slate-900'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2938,7 +3077,7 @@ export default function App() {
                     onClick={closeRoutineEditor}
                     className="w-full sm:w-1/3 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
                   >
-                    Cancelar
+                    {t.cancel}
                   </button>
                   <button
                     type="submit"
@@ -2948,8 +3087,8 @@ export default function App() {
                     <Check className="w-4 h-4 stroke-[3]" />
                     <span>
                       {editingRoutine
-                        ? `Guardar Cambios (${selectedExIdsForRoutine.length} ejercicios)`
-                        : `Crear Rutina (${selectedExIdsForRoutine.length} ejercicios)`}
+                        ? (lang === 'en' ? `Save Changes (${selectedExIdsForRoutine.length} exercises)` : `Guardar Cambios (${selectedExIdsForRoutine.length} ejercicios)`)
+                        : (lang === 'en' ? `Create Routine (${selectedExIdsForRoutine.length} exercises)` : `Crear Rutina (${selectedExIdsForRoutine.length} ejercicios)`)}
                     </span>
                   </button>
                 </div>
@@ -2967,11 +3106,15 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
                       <Flame className="w-3.5 h-3.5" />
-                      Entrena a tu ritmo
+                      {lang === 'en' ? 'Train at your own pace' : 'Entrena a tu ritmo'}
                     </div>
-                    <h2 className="text-xl font-black text-white tracking-tight">¿Listo para entrenar hoy?</h2>
+                    <h2 className="text-xl font-black text-white tracking-tight">
+                      {lang === 'en' ? 'Ready to workout today?' : '¿Listo para entrenar hoy?'}
+                    </h2>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      Inicia un entrenamiento libre o elige tu rutina programada con registro automático de cargas.
+                      {lang === 'en'
+                        ? 'Start a free workout or select your scheduled routine with automatic progressive overload tracking.'
+                        : 'Inicia un entrenamiento libre o elige tu rutina programada con registro automático de cargas.'}
                     </p>
                   </div>
                   <button
@@ -2979,7 +3122,7 @@ export default function App() {
                     className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-3.5 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all text-sm uppercase tracking-wider"
                   >
                     <Play className="w-4 h-4 fill-current" />
-                    <span>🚀 Iniciar Entreno Libre</span>
+                    <span>{lang === 'en' ? '🚀 Start Free Workout' : '🚀 Iniciar Entreno Libre'}</span>
                   </button>
                 </div>
               </div>
@@ -2987,25 +3130,27 @@ export default function App() {
               {/* Cabecera de Rutinas con Botón Crear y Generador Inteligente */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
                 <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Tus Rutinas</h3>
-                  <p className="text-xs text-slate-500">{routines.length} esquemas listos para ejecutar</p>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">{t.routinesHeading}</h3>
+                  <p className="text-xs text-slate-500">
+                    {lang === 'en' ? `${routines.length} routines ready to train` : `${routines.length} esquemas listos para ejecutar`}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleOpenWizard}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs font-black bg-gradient-to-r from-emerald-500/20 via-cyan-500/20 to-emerald-500/10 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-400 border border-emerald-500/40 px-3.5 py-2 rounded-xl active:scale-95 transition shadow-sm"
-                    title="Crear un plan semanal completo adaptado a tus días, material y nivel"
+                    title={lang === 'en' ? 'Create a tailored weekly program based on your days, equipment and level' : 'Crear un plan semanal completo adaptado a tus días, material y nivel'}
                   >
                     <Wand2 className="w-4 h-4 text-cyan-400" />
-                    <span>+ Generar Rutina Inteligente</span>
+                    <span>{t.generateSmartRoutineBtn}</span>
                   </button>
                   <button
                     onClick={openCreateRoutineModal}
                     className="flex items-center justify-center gap-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl border border-slate-700 active:scale-95 transition"
                   >
                     <Plus className="w-4 h-4 text-emerald-400" />
-                    <span className="hidden sm:inline">Crear Manual</span>
-                    <span className="sm:hidden">Crear</span>
+                    <span className="hidden sm:inline">{t.newRoutineBtn}</span>
+                    <span className="sm:hidden">{lang === 'en' ? 'Create' : 'Crear'}</span>
                   </button>
                 </div>
               </div>
@@ -3014,7 +3159,7 @@ export default function App() {
               <div className="grid gap-3.5">
                 {sortedRoutines.map((routine) => {
                   const dayStyle = getDayBadgeStyle(routine.dayOfWeek);
-                  const dayLabel = getDayLabel(routine.dayOfWeek);
+                  const dayLabel = getDayLabel(routine.dayOfWeek, lang);
                   const catMeta = getRoutineCategoryMeta(routine.category, routine.title);
                   const CategoryIcon = catMeta.icon;
 
@@ -3039,7 +3184,7 @@ export default function App() {
                           </span>
                           {routine.isCustom && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                              Personalizada
+                              {lang === 'en' ? 'Custom' : 'Personalizada'}
                             </span>
                           )}
                         </div>
@@ -3048,14 +3193,14 @@ export default function App() {
                           <button
                             onClick={() => openEditRoutineModal(routine)}
                             className="text-slate-500 hover:text-emerald-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-slate-800"
-                            title="Editar rutina"
+                            title={lang === 'en' ? 'Edit routine' : 'Editar rutina'}
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setRoutineToDelete(routine)}
                             className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
-                            title="Eliminar rutina"
+                            title={lang === 'en' ? 'Delete routine' : 'Eliminar rutina'}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -3082,7 +3227,7 @@ export default function App() {
                           className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700/80 active:scale-95 transition"
                         >
                           <Eye className="w-4 h-4 text-cyan-400" />
-                          <span>Ver Detalle</span>
+                          <span>{lang === 'en' ? 'View Details' : 'Ver Detalle'}</span>
                         </button>
 
                         <button
@@ -3090,7 +3235,7 @@ export default function App() {
                           className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition"
                         >
                           <Play className="w-4 h-4 fill-current ml-0.5" />
-                          <span>Iniciar</span>
+                          <span>{t.startRoutineBtn}</span>
                         </button>
                       </div>
                     </div>
@@ -3103,9 +3248,9 @@ export default function App() {
                       <Wand2 className="w-6 h-6 text-emerald-400" />
                     </div>
                     <div>
-                      <h4 className="text-base font-black text-white">No tienes rutinas creadas todavía</h4>
+                      <h4 className="text-base font-black text-white">{t.noRoutinesMsg}</h4>
                       <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-                        Crea un programa completo a medida en 30 segundos con el generador inteligente según tus días y material.
+                        {t.noRoutinesSub}
                       </p>
                     </div>
                     <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xs mx-auto">
@@ -3114,13 +3259,13 @@ export default function App() {
                         className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2"
                       >
                         <Wand2 className="w-4 h-4" />
-                        <span>Generar Plan Inteligente</span>
+                        <span>{t.generateSmartRoutineBtn}</span>
                       </button>
                       <button
                         onClick={openCreateRoutineModal}
                         className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs active:scale-95 transition"
                       >
-                        Crear Manualmente
+                        {lang === 'en' ? 'Create Manually' : 'Crear Manualmente'}
                       </button>
                     </div>
                   </div>
@@ -3227,7 +3372,7 @@ export default function App() {
                               {isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : exIdx + 1}
                             </span>
                             <h3 className="text-sm sm:text-base font-extrabold text-white truncate min-w-0 flex-1">
-                              {exerciseInfo?.name || 'Ejercicio'}
+                              {exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
                             </h3>
                           </div>
 
@@ -3238,14 +3383,14 @@ export default function App() {
                               {exerciseInfo && (
                                 <span
                                   className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                    getEquipmentBadge(exerciseInfo.equipment).color
+                                    getEquipmentBadge(exerciseInfo.equipment, lang).color
                                   }`}
                                 >
-                                  {getEquipmentBadge(exerciseInfo.equipment).label}
+                                  {getEquipmentBadge(exerciseInfo.equipment, lang).label}
                                 </span>
                               )}
                               <span className="text-[10px] text-slate-400 capitalize">
-                                {exerciseInfo ? getMuscleBadge(exerciseInfo.muscle) : ''}
+                                {exerciseInfo ? getMuscleBadge(exerciseInfo.muscle, lang) : ''}
                               </span>
                             </div>
 
@@ -3263,10 +3408,10 @@ export default function App() {
                               >
                                 {isAllCompleted ? (
                                   <>
-                                    <Check className="w-3 h-3 stroke-[3]" /> Completo
+                                    <Check className="w-3 h-3 stroke-[3]" /> {lang === 'en' ? 'Done' : 'Completo'}
                                   </>
                                 ) : (
-                                  `${completedSetsCount}/${totalSetsCount} series`
+                                  `${completedSetsCount}/${totalSetsCount} ${t.sets}`
                                 )}
                               </span>
 
@@ -3278,10 +3423,10 @@ export default function App() {
                                   handleOpenSubstituteModal(exIdx);
                                 }}
                                 className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-cyan-500/10 flex items-center gap-1 border border-transparent hover:border-cyan-500/30"
-                                title="Sustituir por alternativa si la máquina está ocupada"
+                                title={lang === 'en' ? 'Swap for equivalent alternative if equipment is busy' : 'Sustituir por alternativa si la máquina está ocupada'}
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                                <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">Sustituir</span>
+                                <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">{t.swapExerciseBtn}</span>
                               </button>
 
                               {/* Botón Eliminar Ejercicio */}
@@ -3331,7 +3476,7 @@ export default function App() {
                           <div className="p-3.5 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
                             {/* Banner de Sobrecarga Progresiva */}
                             {(() => {
-                              const feedback = getProgressiveOverloadFeedback(workoutEx.exerciseId, history, settings.unit);
+                              const feedback = getProgressiveOverloadFeedback(workoutEx.exerciseId, history, settings.unit, lang);
                               return (
                                 <div
                                   className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
@@ -3370,11 +3515,11 @@ export default function App() {
 
                             {/* Cabecera de Columnas de Series */}
                             <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-1 text-center">
-                              <span className="col-span-2 text-left">Serie</span>
-                              <span className="col-span-3">Anterior</span>
+                              <span className="col-span-2 text-left">{t.setColHeader}</span>
+                              <span className="col-span-3">{t.prevColHeader}</span>
                               <span className="col-span-3">{settings.unit.toUpperCase()}</span>
-                              <span className="col-span-2">Reps</span>
-                              <span className="col-span-2">Listo</span>
+                              <span className="col-span-2">{t.repsColHeader}</span>
+                              <span className="col-span-2">{t.doneColHeader}</span>
                             </div>
 
                             {/* Filas de Series */}
@@ -3499,13 +3644,13 @@ export default function App() {
                                 className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
                               >
                                 <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>Añadir Serie</span>
+                                <span>{t.addSetBtn}</span>
                               </button>
                               <button
                                 onClick={() => toggleExerciseExpand(workoutEx.id)}
                                 className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
                               >
-                                Plegar ejercicio ▲
+                                {lang === 'en' ? 'Collapse exercise ▲' : 'Plegar ejercicio ▲'}
                               </button>
                             </div>
                           </div>
@@ -3521,7 +3666,7 @@ export default function App() {
                   className="w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-700 hover:border-emerald-500/60 bg-slate-900/50 hover:bg-slate-900 text-slate-300 hover:text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.99] transition"
                 >
                   <Plus className="w-4 h-4 text-emerald-400" />
-                  <span>Añadir Ejercicio a la Sesión</span>
+                  <span>{t.addExerciseToSession}</span>
                 </button>
 
                 {/* Botón Final "Finalizar y Guardar Entreno" */}
@@ -3531,7 +3676,7 @@ export default function App() {
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 active:scale-95 transition"
                   >
                     <Trophy className="w-5 h-5 fill-current" />
-                    <span>Finalizar y Guardar Entreno</span>
+                    <span>{t.finishWorkoutBtn}</span>
                   </button>
                 </div>
               </>
@@ -3542,9 +3687,9 @@ export default function App() {
                   <Dumbbell className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white">No hay entrenamiento en curso</h3>
+                  <h3 className="text-lg font-black text-white">{t.noActiveWorkout}</h3>
                   <p className="text-xs text-slate-400 max-w-xs mt-1">
-                    Selecciona una de tus rutinas programadas o empieza una sesión libre desde cero.
+                    {t.noActiveWorkoutDesc}
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2.5 w-full max-w-xs pt-2">
@@ -3553,14 +3698,14 @@ export default function App() {
                     className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2"
                   >
                     <Zap className="w-4 h-4 fill-current" />
-                    <span>Entreno Libre</span>
+                    <span>{lang === 'en' ? 'Quick Start' : 'Entreno Libre'}</span>
                   </button>
                   <button
                     onClick={() => setActiveTab('rutinas')}
                     className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs uppercase tracking-wider border border-slate-700 active:scale-95 transition flex items-center justify-center gap-2"
                   >
                     <Layers className="w-4 h-4 text-emerald-400" />
-                    <span>Ver Rutinas</span>
+                    <span>{lang === 'en' ? 'View Routines' : 'Ver Rutinas'}</span>
                   </button>
                 </div>
               </div>
@@ -3577,9 +3722,9 @@ export default function App() {
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-black text-white uppercase tracking-wider">Catálogo</h2>
+                  <h2 className="text-base font-black text-white uppercase tracking-wider">{t.catalogHeading}</h2>
                   <p className="text-xs text-slate-500">
-                    {exercises.length} ejercicios clásicos y personalizados
+                    {lang === 'en' ? `${exercises.length} classic and custom exercises` : `${exercises.length} ejercicios clásicos y personalizados`}
                   </p>
                 </div>
                 <button
@@ -3587,7 +3732,7 @@ export default function App() {
                   className="flex items-center gap-1.5 text-xs font-bold bg-emerald-500 text-slate-950 px-3.5 py-2 rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
-                  <span>Crear Ejercicio</span>
+                  <span>{t.newExerciseBtn}</span>
                 </button>
               </div>
 
@@ -3596,7 +3741,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Buscar ejercicio por nombre..."
+                  placeholder={t.searchExercisePlaceholder}
                   value={searchExerciseQuery}
                   onChange={(e) => setSearchExerciseQuery(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 pl-10 pr-4 py-2.5 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
@@ -3624,7 +3769,7 @@ export default function App() {
                           : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                       }`}
                     >
-                      {m === 'todos' ? 'Todos' : getMuscleBadge(m)}
+                      {m === 'todos' ? t.all : getMuscleBadge(m, lang)}
                     </button>
                   )
                 )}
@@ -3634,7 +3779,7 @@ export default function App() {
             {/* Listado de Ejercicios Ordenados Jerárquicamente */}
             <div className="space-y-2.5">
               {filteredExercises.map((exercise, idx) => {
-                const badge = getEquipmentBadge(exercise.equipment);
+                const badge = getEquipmentBadge(exercise.equipment, lang);
                 const prevEx = idx > 0 ? filteredExercises[idx - 1] : null;
                 const isNewGroup = !prevEx || prevEx.muscle !== exercise.muscle;
 
@@ -3658,10 +3803,10 @@ export default function App() {
                       <div className="pt-3 pb-1 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                            {getMuscleBadge(exercise.muscle)}
+                            {getMuscleBadge(exercise.muscle, lang)}
                           </span>
                           <span className="text-[10px] text-slate-500 font-bold">
-                            ({filteredExercises.filter((e) => e.muscle === exercise.muscle).length} ejercicios)
+                            ({filteredExercises.filter((e) => e.muscle === exercise.muscle).length} {lang === 'en' ? 'exercises' : 'ejercicios'})
                           </span>
                         </div>
                         <div className="h-px bg-slate-800 flex-1 ml-3" />
@@ -3676,11 +3821,11 @@ export default function App() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <h4 className="text-xs sm:text-sm font-extrabold text-white leading-snug break-words">
-                              {exercise.name}
+                              {getExerciseName(exercise, lang)}
                             </h4>
                             {exercise.isCustom && (
                               <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 shrink-0">
-                                Custom
+                                {t.customExerciseBadge}
                               </span>
                             )}
                           </div>
@@ -3689,7 +3834,7 @@ export default function App() {
                               {badge.label}
                             </span>
                             <span className="text-[10px] text-slate-400 capitalize">
-                              {getMuscleBadge(exercise.muscle)}
+                              {getMuscleBadge(exercise.muscle, lang)}
                             </span>
                           </div>
                         </div>
@@ -3698,13 +3843,13 @@ export default function App() {
                       <div className="flex items-center gap-2 shrink-0">
                         {best1RM > 0 ? (
                           <div className="text-right">
-                            <span className="text-[9px] font-bold uppercase text-slate-500 block">Record 1RM</span>
+                            <span className="text-[9px] font-bold uppercase text-slate-500 block">{t.record1RM}</span>
                             <span className="text-xs font-mono-numbers font-black text-emerald-400">
                               {best1RM} {settings.unit}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[10px] text-slate-600">Sin registro</span>
+                          <span className="text-[10px] text-slate-600">{t.noRecord}</span>
                         )}
 
                         {/* Botón ver evolución en gráfico */}
@@ -3722,7 +3867,7 @@ export default function App() {
                               ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 cursor-pointer'
                               : 'bg-slate-900 text-slate-600 opacity-30 cursor-not-allowed'
                           }`}
-                          title={best1RM > 0 ? 'Ver progresión de este ejercicio' : 'Sin registros de actividad todavía'}
+                          title={best1RM > 0 ? t.viewProgressChart : t.noRecord}
                         >
                           <TrendingUp className="w-4 h-4 text-emerald-400" />
                         </button>
@@ -3734,7 +3879,7 @@ export default function App() {
 
               {filteredExercises.length === 0 && (
                 <div className="text-center py-8 text-xs text-slate-500">
-                  No se encontraron ejercicios con ese criterio.
+                  {lang === 'en' ? 'No exercises found matching your criteria.' : 'No se encontraron ejercicios con ese criterio.'}
                 </div>
               )}
             </div>
@@ -3757,7 +3902,7 @@ export default function App() {
                 }`}
               >
                 <CalendarIcon className="w-3.5 h-3.5" />
-                <span>Calendario de Sesiones</span>
+                <span>{t.calendarSubTab}</span>
               </button>
               <button
                 onClick={() => setHistorySubTab('progreso')}
@@ -3768,7 +3913,7 @@ export default function App() {
                 }`}
               >
                 <TrendingUp className="w-3.5 h-3.5" />
-                <span>Progreso de Cargas (1RM)</span>
+                <span>{t.progressSubTab}</span>
               </button>
             </div>
 
@@ -3779,7 +3924,7 @@ export default function App() {
                   {/* Selector de Mes */}
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-black text-white capitalize">
-                      {selectedCalendarDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+                      {selectedCalendarDate.toLocaleString(lang === 'en' ? 'en-GB' : 'es-ES', { month: 'long', year: 'numeric' })}
                     </h3>
                     <div className="flex items-center gap-1">
                       <button
@@ -3789,6 +3934,7 @@ export default function App() {
                           setSelectedCalendarDate(prev);
                         }}
                         className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        title={lang === 'en' ? 'Previous month' : 'Mes anterior'}
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
@@ -3796,7 +3942,7 @@ export default function App() {
                         onClick={() => setSelectedCalendarDate(new Date())}
                         className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
                       >
-                        Hoy
+                        {lang === 'en' ? 'Today' : 'Hoy'}
                       </button>
                       <button
                         onClick={() => {
@@ -3805,6 +3951,7 @@ export default function App() {
                           setSelectedCalendarDate(next);
                         }}
                         className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        title={lang === 'en' ? 'Next month' : 'Mes siguiente'}
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -3813,13 +3960,9 @@ export default function App() {
 
                   {/* Nombres de los días de la semana */}
                   <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-extrabold uppercase text-slate-500 mb-1">
-                    <span>Lun</span>
-                    <span>Mar</span>
-                    <span>Mié</span>
-                    <span>Jue</span>
-                    <span>Vie</span>
-                    <span>Sáb</span>
-                    <span>Dom</span>
+                    {(lang === 'en' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']).map((d) => (
+                      <span key={d}>{d}</span>
+                    ))}
                   </div>
 
                   {/* Grid de días */}
@@ -3863,7 +4006,7 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="w-4 h-4 text-emerald-400" />
                       <h4 className="text-xs sm:text-sm font-extrabold text-white capitalize">
-                        {inspectedDay.toLocaleDateString('es-ES', {
+                        {inspectedDay.toLocaleDateString(lang === 'en' ? 'en-GB' : 'es-ES', {
                           weekday: 'long',
                           day: 'numeric',
                           month: 'long',
@@ -3873,7 +4016,9 @@ export default function App() {
                     </div>
                     <span className="text-xs font-bold text-slate-400">
                       {inspectedDayWorkouts.length}{' '}
-                      {inspectedDayWorkouts.length === 1 ? 'entrenamiento' : 'entrenamientos'}
+                      {lang === 'en'
+                        ? (inspectedDayWorkouts.length === 1 ? 'workout' : 'workouts')
+                        : (inspectedDayWorkouts.length === 1 ? 'entrenamiento' : 'entrenamientos')}
                     </span>
                   </div>
 
@@ -3892,7 +4037,7 @@ export default function App() {
                                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 mt-0.5 font-mono-numbers">
                                   <span>⏱ {formatTime(session.durationSeconds)}</span>
                                   <span>📦 {metrics.totalVolume.toLocaleString()} {settings.unit}</span>
-                                  <span>🔥 {metrics.totalSets} series</span>
+                                  <span>🔥 {metrics.totalSets} {t.sets}</span>
                                 </div>
                               </div>
 
@@ -3900,7 +4045,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => handleOpenInstagramShare(session)}
                                 className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-amber-500/20 text-pink-300 border border-pink-500/30 hover:border-pink-400 hover:text-white active:scale-95 transition flex items-center gap-1.5 text-[11px] font-bold shrink-0"
-                                title="Publicar este entreno en Instagram Stories"
+                                title={lang === 'en' ? 'Share this workout to Instagram Stories' : 'Publicar este entreno en Instagram Stories'}
                               >
                                 <InstagramIcon className="w-3.5 h-3.5 fill-current" />
                                 <span className="hidden sm:inline">Instagram</span>
@@ -3914,9 +4059,11 @@ export default function App() {
                                 const completedSets = we.sets.filter((s) => s.completed);
                                 return (
                                   <div key={i} className="py-1.5 flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-300">{exInfo?.name || 'Ejercicio'}</span>
+                                    <span className="font-bold text-slate-300">
+                                      {exInfo ? getExerciseName(exInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
+                                    </span>
                                     <div className="flex items-center gap-2 text-slate-400 font-mono-numbers text-[11px]">
-                                      <span>{completedSets.length} series</span>
+                                      <span>{completedSets.length} {t.sets}</span>
                                       <span className="text-emerald-400 font-bold">
                                         Max:{' '}
                                         {Math.max(...completedSets.map((s) => s.weight), 0)}
@@ -3933,7 +4080,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="text-center py-6 text-xs text-slate-500">
-                      Día de descanso o sin registros guardados.
+                      {t.noSessionsOnDay}
                     </div>
                   )}
                 </div>
@@ -3947,9 +4094,9 @@ export default function App() {
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
                     <TrendingUp className="w-6 h-6" />
                   </div>
-                  <h4 className="text-sm font-extrabold text-white">Sin registros de actividad todavía</h4>
+                  <h4 className="text-sm font-extrabold text-white">{t.noActivityOverall}</h4>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    Completa y finaliza tu primer entrenamiento para que aparezcan aquí los ejercicios con registros y puedas analizar su progresión de cargas y 1RM estimada.
+                    {t.noActivityOverallDesc}
                   </p>
                 </div>
               ) : (
@@ -3958,10 +4105,10 @@ export default function App() {
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                        Selecciona Ejercicio para Medir Progresión:
+                        {t.selectExerciseMeasure}
                       </label>
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        {exercisesWithHistory.length} con registro
+                        {t.withActivityBadge(exercisesWithHistory.length)}
                       </span>
                     </div>
                     <div className="relative">
@@ -3971,10 +4118,10 @@ export default function App() {
                         className="w-full bg-slate-950 border border-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl px-3 py-2.5 appearance-none focus:outline-none focus:border-emerald-500"
                       >
                         {exercisesWithHistory.map((ex) => {
-                          const badge = getEquipmentBadge(ex.equipment);
+                          const badge = getEquipmentBadge(ex.equipment, lang);
                           return (
                             <option key={ex.id} value={ex.id}>
-                              {ex.name} ({getMuscleBadge(ex.muscle)} • {badge.label})
+                              {getExerciseName(ex, lang)} ({getMuscleBadge(ex.muscle, lang)} • {badge.label})
                             </option>
                           );
                         })}
@@ -3986,25 +4133,25 @@ export default function App() {
                   {exerciseProgressData && (
                     <div className="grid grid-cols-3 gap-2 pt-2">
                       <div className="bg-slate-950 rounded-xl p-2.5 border border-slate-800 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">1RM Estimada</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">{t.estimated1RM}</span>
                         <span className="text-base sm:text-lg font-black font-mono-numbers text-emerald-400">
                           {exerciseProgressData.max1RM} <span className="text-xs font-normal">{settings.unit}</span>
                         </span>
-                        <span className="text-[9px] text-slate-500 block">Fórmula Epley</span>
+                        <span className="text-[9px] text-slate-500 block">{t.epleyFormula}</span>
                       </div>
                       <div className="bg-slate-950 rounded-xl p-2.5 border border-slate-800 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Carga Máxima</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">{t.maxWeightRecord}</span>
                         <span className="text-base sm:text-lg font-black font-mono-numbers text-cyan-400">
                           {exerciseProgressData.maxWeight} <span className="text-xs font-normal">{settings.unit}</span>
                         </span>
-                        <span className="text-[9px] text-slate-500 block">Récord absoluto</span>
+                        <span className="text-[9px] text-slate-500 block">{t.absoluteRecord}</span>
                       </div>
                       <div className="bg-slate-950 rounded-xl p-2.5 border border-slate-800 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Sesiones</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">{t.recordedSessions}</span>
                         <span className="text-base sm:text-lg font-black font-mono-numbers text-amber-400">
                           {exerciseProgressData.totalSessionsCount}
                         </span>
-                        <span className="text-[9px] text-slate-500 block">Registradas</span>
+                        <span className="text-[9px] text-slate-500 block">{lang === 'en' ? 'Logged' : 'Registradas'}</span>
                       </div>
                     </div>
                   )}
@@ -4016,9 +4163,9 @@ export default function App() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                         <TrendingUp className="w-4 h-4 text-emerald-400" />
-                        <span>Curva de Sobrecarga Progresiva</span>
+                        <span>{t.progressiveCurve}</span>
                       </h4>
-                      <span className="text-[10px] text-slate-500">1RM Estimada (kg) vs Sesión</span>
+                      <span className="text-[10px] text-slate-500">{t.curveSubtitle}</span>
                     </div>
 
                     {/* Gráfico SVG dinámico responsive */}
@@ -4137,12 +4284,12 @@ export default function App() {
 
                     {/* Tabla de Historial para este Ejercicio */}
                     <div className="pt-2">
-                      <h5 className="text-[11px] font-bold uppercase text-slate-400 mb-2">Histórico de Cargas</h5>
+                      <h5 className="text-[11px] font-bold uppercase text-slate-400 mb-2">{t.loadHistoryTable}</h5>
                       <div className="divide-y divide-slate-800 bg-slate-950 rounded-xl overflow-hidden border border-slate-800/80">
                         {exerciseProgressData.dataPoints.slice().reverse().map((dp, idx) => (
                           <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
                             <span className="font-medium text-slate-400">
-                              {new Date(dp.rawDate).toLocaleDateString('es-ES', {
+                              {new Date(dp.rawDate).toLocaleDateString(lang === 'en' ? 'en-GB' : 'es-ES', {
                                 day: 'numeric',
                                 month: 'short',
                               })}
@@ -4160,7 +4307,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-xs text-slate-500">
-                    Aún no hay series registradas para este ejercicio. ¡Completa un entrenamiento para ver su evolución!
+                    {t.noRecordsForExercise}
                   </div>
                 )}
               </div>
@@ -4181,8 +4328,8 @@ export default function App() {
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-white">Aplicación Web Progresiva (PWA)</h3>
-                  <p className="text-xs text-slate-400">100% Funcional sin conexión a internet</p>
+                  <h3 className="text-sm font-extrabold text-white">{t.pwaCardTitle}</h3>
+                  <p className="text-xs text-slate-400">{t.pwaCardSub}</p>
                 </div>
               </div>
 
@@ -4199,21 +4346,60 @@ export default function App() {
                   className="w-full py-3 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4 stroke-[3]" />
-                  <span>Instalar Gimy360 en tu Dispositivo</span>
+                  <span>{t.pwaInstallBtn}</span>
                 </button>
               ) : (
                 <div className="text-xs bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-slate-400">
-                  📱 Para instalar en iOS: Pulsa el botón "Compartir" de Safari y elige "Añadir a la pantalla de inicio". En Chrome/Android: Pulsa el menú de 3 puntos y selecciona "Instalar aplicación".
+                  {t.pwaInstalledOrHelp}
                 </div>
               )}
             </div>
 
             {/* Preferencias de Entrenamiento */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Preferencias</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.preferencesHeading}</h3>
+
+              {/* Selector de Idioma / Language (Español vs English UK) */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-black text-sm">
+                    <Globe className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-extrabold text-white block">{t.languageTitle}</span>
+                    <span className="text-xs text-slate-500">{t.languageSub}</span>
+                  </div>
+                </div>
+                <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, language: 'es' })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
+                      settings.language !== 'en'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🇪🇸</span>
+                    <span>ES</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, language: 'en' })}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
+                      settings.language === 'en'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🇬🇧</span>
+                    <span>EN (UK)</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Tema de la Aplicación (Modo Oscuro / Modo Claro) */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2.5">
                   {settings.theme === 'light' ? (
                     <Sun className="w-5 h-5 text-amber-400" />
@@ -4221,9 +4407,9 @@ export default function App() {
                     <Moon className="w-5 h-5 text-emerald-400" />
                   )}
                   <div>
-                    <span className="text-sm font-extrabold text-white block">Tema de la Aplicación</span>
+                    <span className="text-sm font-extrabold text-white block">{t.themeTitle}</span>
                     <span className="text-xs text-slate-500">
-                      {settings.theme === 'light' ? 'Modo Claro' : 'Modo Oscuro (Por defecto)'}
+                      {settings.theme === 'light' ? t.themeLightSub : t.themeDarkSub}
                     </span>
                   </div>
                 </div>
@@ -4238,7 +4424,7 @@ export default function App() {
                     }`}
                   >
                     <Moon className="w-3.5 h-3.5" />
-                    <span>Oscuro</span>
+                    <span>{t.themeDark}</span>
                   </button>
                   <button
                     type="button"
@@ -4250,7 +4436,7 @@ export default function App() {
                     }`}
                   >
                     <Sun className="w-3.5 h-3.5" />
-                    <span>Claro</span>
+                    <span>{t.themeLight}</span>
                   </button>
                 </div>
               </div>
@@ -4258,8 +4444,8 @@ export default function App() {
               {/* Unidad de Carga */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <div>
-                  <span className="text-sm font-extrabold text-white block">Unidad de Peso</span>
-                  <span className="text-xs text-slate-500">Kilogramos o Libras</span>
+                  <span className="text-sm font-extrabold text-white block">{t.weightUnitTitle}</span>
+                  <span className="text-xs text-slate-500">{t.weightUnitSub}</span>
                 </div>
                 <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
                   <button
@@ -4284,19 +4470,19 @@ export default function App() {
               {/* Tiempo de descanso por defecto */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <div>
-                  <span className="text-sm font-extrabold text-white block">Descanso Predeterminado</span>
-                  <span className="text-xs text-slate-500">Al completar una serie</span>
+                  <span className="text-sm font-extrabold text-white block">{t.restTimerTitle}</span>
+                  <span className="text-xs text-slate-500">{t.restTimerSub}</span>
                 </div>
                 <select
                   value={settings.defaultRestTime}
                   onChange={(e) => setSettings({ ...settings, defaultRestTime: parseInt(e.target.value) })}
                   className="bg-slate-950 border border-slate-800 text-white text-xs font-bold rounded-xl px-3 py-2 focus:outline-none"
                 >
-                  <option value={45}>45 seg</option>
-                  <option value={60}>60 seg</option>
-                  <option value={90}>90 seg (Recomendado)</option>
-                  <option value={120}>120 seg (Fuerza)</option>
-                  <option value={180}>180 seg (Pesado)</option>
+                  <option value={45}>45 {t.seconds}</option>
+                  <option value={60}>60 {t.seconds}</option>
+                  <option value={90}>90 {t.seconds} ({lang === 'en' ? 'Recommended' : 'Recomendado'})</option>
+                  <option value={120}>120 {t.seconds} ({lang === 'en' ? 'Strength' : 'Fuerza'})</option>
+                  <option value={180}>180 {t.seconds} ({lang === 'en' ? 'Heavy' : 'Pesado'})</option>
                 </select>
               </div>
 
@@ -4309,8 +4495,8 @@ export default function App() {
                     <VolumeX className="w-4 h-4 text-slate-500" />
                   )}
                   <div>
-                    <span className="text-sm font-extrabold text-white block">Alerta Sonora</span>
-                    <span className="text-xs text-slate-500">Beep sintetizado al finalizar el descanso</span>
+                    <span className="text-sm font-extrabold text-white block">{t.soundTitle}</span>
+                    <span className="text-xs text-slate-500">{t.soundSub}</span>
                   </div>
                 </div>
                 <button
@@ -4330,9 +4516,11 @@ export default function App() {
 
             {/* Respaldo y Gestión de Datos */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Datos Offline (JSON)</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.dataManagementHeading}</h3>
               <p className="text-xs text-slate-400">
-                Tus datos residen 100% en tu navegador. Puedes exportar una copia de seguridad o importar datos en cualquier momento.
+                {lang === 'en'
+                  ? 'All workout records reside safely in your browser local storage. You can backup or restore anytime.'
+                  : 'Tus datos residen 100% en tu navegador. Puedes exportar una copia de seguridad o importar datos en cualquier momento.'}
               </p>
 
               <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -4341,12 +4529,12 @@ export default function App() {
                   className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition"
                 >
                   <Download className="w-4 h-4 text-emerald-400" />
-                  <span>Exportar JSON</span>
+                  <span>{t.exportDataBtn}</span>
                 </button>
 
                 <label className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition cursor-pointer">
                   <Upload className="w-4 h-4 text-cyan-400" />
-                  <span>Importar JSON</span>
+                  <span>{t.importDataBtn}</span>
                   <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
                 </label>
               </div>
@@ -4590,11 +4778,11 @@ export default function App() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-400 block mb-1">Nombre del Ejercicio</label>
+                <label className="text-xs font-bold text-slate-400 block mb-1">{t.exerciseNameLabel}</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Press Francés en Banco Inclinado"
+                  placeholder={lang === 'en' ? 'e.g. Incline Bench French Press' : 'Ej: Press Francés en Banco Inclinado'}
                   value={newExName}
                   onChange={(e) => setNewExName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
@@ -4602,34 +4790,34 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 block mb-1">Grupo Muscular</label>
+                <label className="text-xs font-bold text-slate-400 block mb-1">{t.exerciseMuscleLabel}</label>
                 <select
                   value={newExMuscle}
                   onChange={(e) => setNewExMuscle(e.target.value as MuscleGroup)}
                   className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500 capitalize"
                 >
-                  <option value="pecho">Pecho</option>
-                  <option value="espalda">Espalda</option>
-                  <option value="piernas">Piernas</option>
-                  <option value="hombro">Hombro</option>
-                  <option value="brazos">Brazos</option>
-                  <option value="core">Core</option>
+                  <option value="pecho">{getMuscleBadge('pecho', lang)}</option>
+                  <option value="espalda">{getMuscleBadge('espalda', lang)}</option>
+                  <option value="piernas">{getMuscleBadge('piernas', lang)}</option>
+                  <option value="hombro">{getMuscleBadge('hombro', lang)}</option>
+                  <option value="brazos">{getMuscleBadge('brazos', lang)}</option>
+                  <option value="core">{getMuscleBadge('core', lang)}</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 block mb-1">Equipamiento</label>
+                <label className="text-xs font-bold text-slate-400 block mb-1">{t.exerciseEquipLabel}</label>
                 <select
                   value={newExEquipment}
                   onChange={(e) => setNewExEquipment(e.target.value as Equipment)}
                   className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
                 >
-                  <option value="barra">Barra Olímpica / Estándar</option>
-                  <option value="mancuerna">Mancuernas</option>
-                  <option value="polea">Polea / Cable</option>
-                  <option value="smith">Multi-Power / Smith</option>
-                  <option value="maquina">Máquina Guiada</option>
-                  <option value="corporal">Peso Corporal / Calistenia</option>
+                  <option value="barra">{lang === 'en' ? 'Barbell (Olympic / Standard)' : 'Barra Olímpica / Estándar'}</option>
+                  <option value="mancuerna">{lang === 'en' ? 'Dumbbells' : 'Mancuernas'}</option>
+                  <option value="polea">{lang === 'en' ? 'Cable / Pulley' : 'Polea / Cable'}</option>
+                  <option value="smith">{lang === 'en' ? 'Smith Machine' : 'Multi-Power / Smith'}</option>
+                  <option value="maquina">{lang === 'en' ? 'Selectorized Machine' : 'Máquina Guiada'}</option>
+                  <option value="corporal">{lang === 'en' ? 'Bodyweight / Calisthenics' : 'Peso Corporal / Calistenia'}</option>
                 </select>
               </div>
             </div>
@@ -4640,20 +4828,18 @@ export default function App() {
                 onClick={() => setShowCreateExerciseModal(false)}
                 className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
               >
-                Cancelar
+                {t.cancel}
               </button>
               <button
                 type="submit"
                 className="flex-1 py-3 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition"
               >
-                Guardar Ejercicio
+                {lang === 'en' ? 'Save Exercise' : 'Guardar Ejercicio'}
               </button>
             </div>
           </form>
         </div>
       )}
-
-
 
       {/* ==========================================================================
           MODAL POPUP: DETALLE DE LA RUTINA
@@ -4673,7 +4859,7 @@ export default function App() {
                     } flex items-center gap-1`}
                   >
                     <CalendarIcon className="w-3 h-3" />
-                    {getDayLabel(selectedRoutineDetail.dayOfWeek)}
+                    {getDayLabel(selectedRoutineDetail.dayOfWeek, lang)}
                   </span>
                 )}
                 <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -4681,7 +4867,7 @@ export default function App() {
                 </span>
                 {selectedRoutineDetail.isCustom && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                    Personalizada
+                    {lang === 'en' ? 'Custom' : 'Personalizada'}
                   </span>
                 )}
               </div>
@@ -4712,9 +4898,13 @@ export default function App() {
               )}
               <div className="mt-2.5 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400">
-                  Ejercicios en esta rutina ({selectedRoutineDetail.exerciseIds.length})
+                  {lang === 'en'
+                    ? `Exercises in this routine (${selectedRoutineDetail.exerciseIds.length})`
+                    : `Ejercicios en esta rutina (${selectedRoutineDetail.exerciseIds.length})`}
                 </span>
-                <span className="text-[10px] text-slate-500">1 serie inicial por ejercicio</span>
+                <span className="text-[10px] text-slate-500">
+                  {lang === 'en' ? '1 initial set per exercise' : '1 serie inicial por ejercicio'}
+                </span>
               </div>
             </div>
 
@@ -4722,7 +4912,7 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {selectedRoutineDetail.exerciseIds.map((exId, idx) => {
                 const ex = exercises.find((e) => e.id === exId);
-                const badge = ex ? getEquipmentBadge(ex.equipment) : null;
+                const badge = ex ? getEquipmentBadge(ex.equipment, lang) : null;
                 const prevSets = getPreviousExerciseSets(exId);
                 const bestCompletedSet = prevSets.length > 0 ? prevSets[0] : null;
 
@@ -4737,7 +4927,7 @@ export default function App() {
                       </span>
                       <div className="min-w-0">
                         <h4 className="text-xs sm:text-sm font-extrabold text-white truncate">
-                          {ex?.name || 'Ejercicio'}
+                          {ex ? getExerciseName(ex, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
                         </h4>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {badge && (
@@ -4745,7 +4935,9 @@ export default function App() {
                               {badge.label}
                             </span>
                           )}
-                          <span className="text-[10px] text-slate-400 capitalize">{ex?.muscle}</span>
+                          <span className="text-[10px] text-slate-400 capitalize">
+                            {ex ? getMuscleBadge(ex.muscle, lang) : ''}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -4753,13 +4945,17 @@ export default function App() {
                     <div className="text-right shrink-0">
                       {bestCompletedSet ? (
                         <div>
-                          <span className="text-[9px] text-slate-500 block uppercase font-bold">Último</span>
+                          <span className="text-[9px] text-slate-500 block uppercase font-bold">
+                            {lang === 'en' ? 'Last' : 'Último'}
+                          </span>
                           <span className="text-[11px] font-mono-numbers text-emerald-400 font-bold">
                             {bestCompletedSet.weight} {settings.unit} × {bestCompletedSet.reps}
                           </span>
                         </div>
                       ) : (
-                        <span className="text-[10px] text-slate-600 block">Sin marcas previas</span>
+                        <span className="text-[10px] text-slate-600 block">
+                          {lang === 'en' ? 'No prior logs' : 'Sin marcas previas'}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -4776,7 +4972,7 @@ export default function App() {
                   setRoutineToDelete(target);
                 }}
                 className="p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 active:scale-95 transition"
-                title="Eliminar esta rutina"
+                title={lang === 'en' ? 'Delete this routine' : 'Eliminar esta rutina'}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -4787,16 +4983,16 @@ export default function App() {
                   openEditRoutineModal(target);
                 }}
                 className="py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-95 transition flex items-center gap-1.5 text-xs font-bold"
-                title="Editar esta rutina"
+                title={lang === 'en' ? 'Edit this routine' : 'Editar esta rutina'}
               >
                 <Pencil className="w-4 h-4 text-emerald-400" />
-                <span>Editar</span>
+                <span>{t.edit}</span>
               </button>
               <button
                 onClick={() => setSelectedRoutineDetail(null)}
                 className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
               >
-                Cerrar
+                {t.close}
               </button>
               <button
                 onClick={() => {
@@ -4807,7 +5003,7 @@ export default function App() {
                 className="flex-[2] py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition"
               >
                 <Play className="w-4 h-4 fill-current ml-0.5" />
-                <span>Iniciar Entreno</span>
+                <span>{t.startWorkoutBtn}</span>
               </button>
             </div>
           </div>
@@ -4824,9 +5020,11 @@ export default function App() {
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">¿Eliminar esta rutina?</h3>
+              <h3 className="text-base font-black text-white">{t.deleteRoutineConfirm}</h3>
               <p className="text-xs text-slate-400 mt-1">
-                Se eliminará la rutina <strong className="text-white">"{routineToDelete.title}"</strong> de forma permanente.
+                {lang === 'en'
+                  ? `Routine "${routineToDelete.title}" will be permanently removed.`
+                  : `Se eliminará la rutina "${routineToDelete.title}" de forma permanente.`}
               </p>
             </div>
             <div className="flex gap-2 pt-1">
@@ -4835,14 +5033,14 @@ export default function App() {
                 onClick={() => setRoutineToDelete(null)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
               >
-                Cancelar
+                {t.cancel}
               </button>
               <button
                 type="button"
                 onClick={() => handleDeleteRoutine(routineToDelete.id)}
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
               >
-                Sí, Eliminar
+                {t.deleteRoutineBtn}
               </button>
             </div>
           </div>
@@ -4859,9 +5057,9 @@ export default function App() {
               <AlertTriangle className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">¿Cancelar entrenamiento?</h3>
+              <h3 className="text-base font-black text-white">{t.cancelWorkoutModalTitle}</h3>
               <p className="text-xs text-slate-400 mt-1">
-                Se detendrá el cronómetro y se descartará el progreso de esta sesión no guardada.
+                {t.cancelWorkoutModalDesc}
               </p>
             </div>
             <div className="flex gap-2 pt-1">
@@ -4870,7 +5068,7 @@ export default function App() {
                 onClick={() => setShowCancelWorkoutModal(false)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
               >
-                Continuar
+                {t.cancelWorkoutKeep}
               </button>
               <button
                 type="button"
@@ -4881,7 +5079,7 @@ export default function App() {
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
               >
-                Sí, Cancelar
+                {t.cancelWorkoutConfirm}
               </button>
             </div>
           </div>
@@ -4900,7 +5098,7 @@ export default function App() {
 
             <div>
               <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-400">
-                ¡Entrenamiento Completado!
+                {t.finishModalHeading}
               </span>
               <h3 className="text-xl font-black text-white mt-1">{showFinishModal.title}</h3>
             </div>
@@ -4908,19 +5106,19 @@ export default function App() {
             {/* Tarjetas de estadísticas */}
             <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Tiempo</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">{t.time}</span>
                 <span className="text-sm font-black font-mono-numbers text-white">
                   {formatTime(showFinishModal.durationSeconds)}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Volumen</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">{t.volume}</span>
                 <span className="text-sm font-black font-mono-numbers text-emerald-400">
                   {getSessionMetrics(showFinishModal).totalVolume.toLocaleString()} {settings.unit}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Series</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">{t.sets}</span>
                 <span className="text-sm font-black font-mono-numbers text-cyan-400">
                   {getSessionMetrics(showFinishModal).totalSets}
                 </span>
@@ -4928,7 +5126,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-400">
-              Gran trabajo de sobrecarga. Tus cargas han sido registradas en tu historial y calendario para proyectar tu 1RM.
+              {t.finishModalMsg}
             </p>
 
             <div className="space-y-2 pt-1">
@@ -4939,7 +5137,7 @@ export default function App() {
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:opacity-95 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-pink-500/25 active:scale-95 transition flex items-center justify-center gap-2"
               >
                 <InstagramIcon className="w-4 h-4 fill-current" />
-                <span>Publicar en Instagram Stories</span>
+                <span>{t.shareInstagramStories}</span>
               </button>
 
               <button
@@ -4950,7 +5148,7 @@ export default function App() {
                 }}
                 className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
               >
-                Ver en Historial & Calendario
+                {t.viewHistoryBtn}
               </button>
             </div>
           </div>
@@ -4970,8 +5168,8 @@ export default function App() {
                   <InstagramIcon className="w-4 h-4 fill-current" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-white">Publicar en Instagram</h3>
-                  <span className="text-[11px] text-slate-400">Tarjeta de Story en formato 9:16</span>
+                  <h3 className="text-sm sm:text-base font-black text-white">{t.instagramModalTitle}</h3>
+                  <span className="text-[11px] text-slate-400">{t.instagramModalSub}</span>
                 </div>
               </div>
               <button
@@ -4997,7 +5195,7 @@ export default function App() {
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-purple-500 to-amber-400"></span>
-                  <span>Atardecer</span>
+                  <span>{t.themeSunset}</span>
                 </button>
 
                 <button
@@ -5010,7 +5208,7 @@ export default function App() {
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                  <span>Esmeralda</span>
+                  <span>{t.themeEmerald}</span>
                 </button>
 
                 <button
@@ -5023,7 +5221,7 @@ export default function App() {
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-                  <span>Cyber Cyan</span>
+                  <span>{t.themeCyan}</span>
                 </button>
               </div>
 
@@ -5052,7 +5250,7 @@ export default function App() {
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:opacity-95 disabled:opacity-50 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-pink-500/25 active:scale-95 transition flex items-center justify-center gap-2"
               >
                 <InstagramIcon className="w-4 h-4 fill-current" />
-                <span>{isSharingInstagram ? 'Preparando Story...' : 'Compartir en Instagram Stories'}</span>
+                <span>{isSharingInstagram ? t.preparingStory : t.shareInstagramStories}</span>
               </button>
 
               <div className="grid grid-cols-2 gap-2">
@@ -5062,7 +5260,7 @@ export default function App() {
                   className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition border border-slate-700"
                 >
                   <Download className="w-4 h-4 text-emerald-400" />
-                  <span>Guardar Imagen</span>
+                  <span>{t.saveImage}</span>
                 </button>
 
                 <button
@@ -5073,12 +5271,12 @@ export default function App() {
                   {copyCaptionSuccess ? (
                     <>
                       <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
-                      <span className="text-emerald-400">¡Copiado!</span>
+                      <span className="text-emerald-400">{t.copied}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-4 h-4 text-cyan-400" />
-                      <span>Copiar Texto</span>
+                      <span>{t.copyText}</span>
                     </>
                   )}
                 </button>
@@ -5092,7 +5290,7 @@ export default function App() {
                   rel="noopener noreferrer"
                   className="text-[11px] font-bold text-slate-400 hover:text-pink-400 inline-flex items-center gap-1 transition"
                 >
-                  <span>Abrir Instagram</span>
+                  <span>{t.openInstagram}</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -5114,9 +5312,13 @@ export default function App() {
                   <RefreshCw className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-extrabold text-white truncate">Sustituir Ejercicio</h3>
+                  <h3 className="text-sm font-extrabold text-white truncate">{t.swapModalTitle}</h3>
                   <span className="text-[11px] text-slate-400">
-                    Cambiar <strong className="text-cyan-400">{substituteExerciseModal.currentExercise.name}</strong> ({substituteExerciseModal.currentExercise.muscle})
+                    {lang === 'en' ? 'Swap ' : 'Cambiar '}
+                    <strong className="text-cyan-400">
+                      {getExerciseName(substituteExerciseModal.currentExercise, lang)}
+                    </strong>{' '}
+                    ({getMuscleBadge(substituteExerciseModal.currentExercise.muscle, lang)})
                   </span>
                 </div>
               </div>
@@ -5132,7 +5334,9 @@ export default function App() {
             <div className="p-3 bg-cyan-950/20 border-b border-cyan-500/20 px-4 text-xs text-cyan-300 flex items-center gap-2">
               <Lightbulb className="w-4 h-4 text-cyan-400 shrink-0" />
               <span>
-                Elige otra alternativa para <strong className="capitalize">{substituteExerciseModal.currentExercise.muscle}</strong> si el equipo está ocupado.
+                {lang === 'en'
+                  ? 'Select an equivalent alternative if gym equipment is occupied.'
+                  : 'Elige otra alternativa para el mismo grupo muscular si la máquina está ocupada.'}
               </span>
             </div>
 
@@ -5142,7 +5346,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Buscar ejercicio alternativo..."
+                  placeholder={t.filterAlternativesSearch}
                   value={substituteSearchQuery}
                   onChange={(e) => setSubstituteSearchQuery(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 text-white pl-9 pr-3 py-2 rounded-xl text-xs placeholder-slate-500 focus:outline-none"
@@ -5161,7 +5365,7 @@ export default function App() {
                         : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    {eq === 'todos' ? 'Todos' : eq}
+                    {eq === 'todos' ? t.all : getEquipmentBadge(eq as Equipment, lang).label}
                   </button>
                 ))}
               </div>
@@ -5176,23 +5380,26 @@ export default function App() {
                   const isSameMuscle = ex.muscle === currentEx.muscle;
                   const isNotCurrent = ex.id !== currentEx.id;
                   const notInWorkout = !existingWorkoutExIds.has(ex.id);
-                  const matchesSearch = ex.name.toLowerCase().includes(substituteSearchQuery.toLowerCase());
+                  const localizedAltName = getExerciseName(ex, lang).toLowerCase();
+                  const matchesSearch =
+                    localizedAltName.includes(substituteSearchQuery.toLowerCase()) ||
+                    ex.name.toLowerCase().includes(substituteSearchQuery.toLowerCase());
                   const matchesEq = substituteFilterEquipment === 'todos' || ex.equipment === substituteFilterEquipment;
                   return isSameMuscle && isNotCurrent && notInWorkout && matchesSearch && matchesEq;
                 });
 
-                const sortedAlternatives = sortExercisesByTypeMaterialName(alternatives);
+                const sortedAlternatives = sortExercisesByTypeMaterialName(alternatives, lang);
 
                 if (sortedAlternatives.length === 0) {
                   return (
                     <div className="text-center py-8 px-4 text-xs text-slate-500">
-                      No se encontraron ejercicios alternativos con los filtros seleccionados.
+                      {t.noAlternativesFound}
                     </div>
                   );
                 }
 
                 return sortedAlternatives.map((alt) => {
-                  const badge = getEquipmentBadge(alt.equipment);
+                  const badge = getEquipmentBadge(alt.equipment, lang);
                   const prevSets = getPreviousExerciseSets(alt.id);
                   const bestPrev = prevSets.length > 0 ? prevSets[0] : null;
 
@@ -5204,7 +5411,7 @@ export default function App() {
                     >
                       <div className="min-w-0 pr-2 flex-1">
                         <span className="text-xs sm:text-sm font-bold text-white block group-hover:text-cyan-400 transition-colors leading-snug break-words">
-                          {alt.name}
+                          {getExerciseName(alt, lang)}
                         </span>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
@@ -5212,16 +5419,18 @@ export default function App() {
                           </span>
                           {bestPrev ? (
                             <span className="text-[10px] text-emerald-400 font-mono-numbers">
-                              Marca previa: {bestPrev.weight} {settings.unit} × {bestPrev.reps}
+                              {lang === 'en' ? 'Previous best:' : 'Marca previa:'} {bestPrev.weight} {settings.unit} × {bestPrev.reps}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-slate-500">Sin registros previos</span>
+                            <span className="text-[10px] text-slate-500">
+                              {lang === 'en' ? 'No prior logs' : 'Sin registros previos'}
+                            </span>
                           )}
                         </div>
                       </div>
 
                       <span className="text-[11px] font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg shrink-0">
-                        Elegir
+                        {t.swapConfirmBtn}
                       </span>
                     </button>
                   );
@@ -5235,7 +5444,7 @@ export default function App() {
                 onClick={() => setSubstituteExerciseModal(null)}
                 className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
               >
-                Cancelar
+                {t.cancel}
               </button>
             </div>
           </div>
@@ -5270,8 +5479,8 @@ export default function App() {
                 }`}
               >
                 <ArrowLeft className="w-4 h-4 text-emerald-400" />
-                <span className="hidden sm:inline">Volver a Rutinas</span>
-                <span className="sm:hidden">Volver</span>
+                <span className="hidden sm:inline">{lang === 'en' ? 'Back to Routines' : 'Volver a Rutinas'}</span>
+                <span className="sm:hidden">{lang === 'en' ? 'Back' : 'Volver'}</span>
               </button>
 
               <div
@@ -5286,11 +5495,13 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base font-black leading-tight">
-                    Generador Inteligente de Rutinas
+                    {t.wizardTitle}
                   </h2>
                   <div className="flex flex-wrap items-center gap-2 mt-0.5">
                     <span className="text-[10px] uppercase font-black tracking-wider text-emerald-500">
-                      {wizardStep <= 4 ? `Paso ${wizardStep} de 4` : 'Vista Previa del Plan'}
+                      {wizardStep <= 4
+                        ? (lang === 'en' ? `Step ${wizardStep} of 4` : `Paso ${wizardStep} de 4`)
+                        : (lang === 'en' ? 'Plan Preview' : 'Vista Previa del Plan')}
                     </span>
                   </div>
                 </div>
@@ -5306,7 +5517,7 @@ export default function App() {
                     ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
-                title="Cerrar generador"
+                title={lang === 'en' ? 'Close wizard' : 'Cerrar generador'}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -5323,11 +5534,11 @@ export default function App() {
           >
             <div className="max-w-4xl mx-auto flex items-center justify-between">
               {[
-                { step: 1, label: 'Días' },
-                { step: 2, label: 'Material' },
-                { step: 3, label: 'Objetivo' },
-                { step: 4, label: 'Nivel' },
-                { step: 5, label: 'Revisión' },
+                { step: 1, label: lang === 'en' ? 'Days' : 'Días' },
+                { step: 2, label: lang === 'en' ? 'Equipment' : 'Material' },
+                { step: 3, label: lang === 'en' ? 'Goal' : 'Objetivo' },
+                { step: 4, label: lang === 'en' ? 'Level' : 'Nivel' },
+                { step: 5, label: lang === 'en' ? 'Review' : 'Revisión' },
               ].map((item, index) => {
                 const isCurrent = wizardStep === item.step;
                 const isDone = wizardStep > item.step;
@@ -5388,10 +5599,12 @@ export default function App() {
               {wizardStep === 1 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Paso 1 de 4</span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuántos días vas a entrenar a la semana?</h3>
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                      {lang === 'en' ? 'Step 1 of 4' : 'Paso 1 de 4'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">{t.wizardStep1Title}</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                      El algoritmo local distribuirá las cargas semanales en divisiones de entrenamiento balanceadas (Full Body, Torso/Pierna o Push/Pull/Legs) garantizando días de recuperación adecuados.
+                      {t.wizardStep1Sub}
                     </p>
                   </div>
 
@@ -5399,38 +5612,48 @@ export default function App() {
                     {[
                       {
                         days: 2,
-                        title: '2 Días / Semana',
+                        title: lang === 'en' ? '2 Days / Week' : '2 Días / Semana',
                         split: 'Full Body (2x)',
-                        desc: 'Ideal si tienes poco tiempo o practicas otro deporte. Trabaja todo el cuerpo en cada sesión.',
-                        badge: 'Mantenimiento & Fuerza',
+                        desc: lang === 'en'
+                          ? 'Ideal if you have limited time or practice other sports. Hits the full body each session.'
+                          : 'Ideal si tienes poco tiempo o practicas otro deporte. Trabaja todo el cuerpo en cada sesión.',
+                        badge: lang === 'en' ? 'Maintenance & Strength' : 'Mantenimiento & Fuerza',
                       },
                       {
                         days: 3,
-                        title: '3 Días / Semana',
+                        title: lang === 'en' ? '3 Days / Week' : '3 Días / Semana',
                         split: 'Full Body (3x)',
-                        desc: 'La división más probada para fuerza general con 48h completas de recuperación entre sesiones.',
-                        badge: 'Alta Eficiencia',
+                        desc: lang === 'en'
+                          ? 'The most time-tested split for general strength with 48h full recovery between workouts.'
+                          : 'La división más probada para fuerza general con 48h completas de recuperación entre sesiones.',
+                        badge: lang === 'en' ? 'High Efficiency' : 'Alta Eficiencia',
                       },
                       {
                         days: 4,
-                        title: '4 Días / Semana',
-                        split: 'Torso / Pierna',
-                        desc: 'El balance perfecto entre volumen muscular, progresión lineal y descanso. 2 días torso, 2 días pierna.',
-                        badge: 'Más Popular',
+                        title: lang === 'en' ? '4 Days / Week' : '4 Días / Semana',
+                        split: 'Upper / Lower',
+                        desc: lang === 'en'
+                          ? 'The golden ratio of volume, progressive overload, and rest. 2 upper body days, 2 lower body days.'
+                          : 'El balance perfecto entre volumen muscular, progresión lineal y descanso. 2 días torso, 2 días pierna.',
+                        badge: lang === 'en' ? 'Most Popular' : 'Más Popular',
                       },
                       {
                         days: 5,
-                        title: '5 Días / Semana',
-                        split: 'PPL + Torso/Pierna',
-                        desc: 'Empuje, Tirón, Pierna + 2 sesiones accesorias para maximizar estímulo por grupo muscular.',
-                        badge: 'Volumen Alto',
+                        title: lang === 'en' ? '5 Days / Week' : '5 Días / Semana',
+                        split: 'PPL + Upper/Lower',
+                        desc: lang === 'en'
+                          ? 'Push, Pull, Legs + 2 targeted accessory days to maximize muscle stimulus per group.'
+                          : 'Empuje, Tirón, Pierna + 2 sesiones accesorias para maximizar estímulo por grupo muscular.',
+                        badge: lang === 'en' ? 'High Volume' : 'Volumen Alto',
                       },
                       {
                         days: 6,
-                        title: '6 Días / Semana',
+                        title: lang === 'en' ? '6 Days / Week' : '6 Días / Semana',
                         split: 'Push / Pull / Legs (2x)',
-                        desc: 'Frecuencia 2x para cada músculo. Diseñado para usuarios experimentados que buscan máximo crecimiento.',
-                        badge: 'Máximo Estímulo',
+                        desc: lang === 'en'
+                          ? '2x weekly frequency per muscle. Designed for experienced lifters seeking maximum growth.'
+                          : 'Frecuencia 2x para cada músculo. Diseñado para usuarios experimentados que buscan máximo crecimiento.',
+                        badge: lang === 'en' ? 'Maximum Stimulus' : 'Máximo Estímulo',
                       },
                     ].map((item) => {
                       const isSelected = wizardConfig.days === item.days;
@@ -5478,7 +5701,15 @@ export default function App() {
                   <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
                     <Lightbulb className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Algoritmo local:</strong> Las rutinas asignan automáticamente los días óptimos de la semana (por ejemplo, Lunes-Jueves para 2 días, Lunes-Miércoles-Viernes para 3 días o Lunes-Martes-Jueves-Viernes para 4 días).
+                      {lang === 'en' ? (
+                        <>
+                          <strong>Local algorithm:</strong> Routines automatically assign optimal training days of the week (e.g. Mon-Thu for 2 days, Mon-Wed-Fri for 3 days or Mon-Tue-Thu-Fri for 4 days).
+                        </>
+                      ) : (
+                        <>
+                          <strong>Algoritmo local:</strong> Las rutinas asignan automáticamente los días óptimos de la semana (por ejemplo, Lunes-Jueves para 2 días, Lunes-Miércoles-Viernes para 3 días o Lunes-Martes-Jueves-Viernes para 4 días).
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -5488,10 +5719,12 @@ export default function App() {
               {wizardStep === 2 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-cyan-400">Paso 2 de 4</span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Qué equipamiento tienes disponible?</h3>
+                    <span className="text-xs font-black uppercase tracking-wider text-cyan-400">
+                      {lang === 'en' ? 'Step 2 of 4' : 'Paso 2 de 4'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">{t.wizardStep2Title}</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                      El algoritmo local filtra estrictamente la base de datos de 126 ejercicios para asignar únicamente los que coincidan con tus herramientas disponibles.
+                      {t.wizardStep2Sub}
                     </p>
                   </div>
 
@@ -5500,23 +5733,23 @@ export default function App() {
                       {
                         key: 'gimnasio_completo' as WizardEquipment,
                         icon: Dumbbell,
-                        title: 'Gimnasio Comercial Completo',
-                        desc: 'Acceso a barras olímpicas, mancuernas, poleas, jaulas de potencia, multipower y máquinas guiadas.',
-                        badge: 'Acceso total a 126 ejercicios',
+                        title: t.equipFullGym,
+                        desc: t.equipFullGymDesc,
+                        badge: lang === 'en' ? 'Full access to 126 exercises' : 'Acceso total a 126 ejercicios',
                       },
                       {
                         key: 'solo_mancuernas' as WizardEquipment,
                         icon: Target,
-                        title: 'Solo Mancuernas & Peso Corporal',
-                        desc: 'Mancuernas ajustables o fijas y peso corporal. Perfecto para home gym, banco ajustable o garaje.',
-                        badge: 'Filtro: Mancuernas + Corporal',
+                        title: t.equipDumbbellsOnly,
+                        desc: t.equipDumbbellsOnlyDesc,
+                        badge: lang === 'en' ? 'Filter: Dumbbells + Bodyweight' : 'Filtro: Mancuernas + Corporal',
                       },
                       {
                         key: 'peso_corporal' as WizardEquipment,
                         icon: Activity,
-                        title: 'Peso Corporal / Calistenia en Casa',
-                        desc: 'Flexiones, fondos, sentadillas aéreas, dominadas y variantes corporales sin necesidad de máquinas pesadas.',
-                        badge: 'Filtro: Sin material pesado',
+                        title: t.equipBodyweightHome,
+                        desc: t.equipBodyweightHomeDesc,
+                        badge: lang === 'en' ? 'Filter: No heavy equipment' : 'Filtro: Sin material pesado',
                       },
                     ].map((item) => {
                       const isSelected = wizardConfig.equipment === item.key;
@@ -5568,7 +5801,15 @@ export default function App() {
                   <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
                     <Zap className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Ejecución local garantizada:</strong> Ningún dato sale de tu navegador. El filtrado y la compatibilidad mecánica se calculan 100% en local sin usar la API de Gemini ni servidores remotos.
+                      {lang === 'en' ? (
+                        <>
+                          <strong>Guaranteed local execution:</strong> No data leaves your device. Exercise filtering and biomechanical split balance run 100% locally in your browser.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Ejecución local garantizada:</strong> Ningún dato sale de tu navegador. El filtrado y la compatibilidad mecánica se calculan 100% en local sin usar la API de Gemini ni servidores remotos.
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -5578,10 +5819,12 @@ export default function App() {
               {wizardStep === 3 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">Paso 3 de 4</span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuál es tu objetivo prioritario?</h3>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400">
+                      {lang === 'en' ? 'Step 3 of 4' : 'Paso 3 de 4'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">{t.wizardStep3Title}</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                      Ajusta los rangos de repeticiones objetivo, los descansos recomendados y la selección de movimientos básicos frente a accesorios de aislamiento.
+                      {t.wizardStep3Sub}
                     </p>
                   </div>
 
@@ -5590,23 +5833,23 @@ export default function App() {
                       {
                         key: 'hipertrofia' as WizardGoal,
                         icon: Flame,
-                        title: 'Hipertrofia & Ganancia Muscular',
-                        desc: 'Rango óptimo de 8-12 repeticiones. Máxima tensión mecánica y congestión para estimular el crecimiento de masa magra.',
-                        badge: 'Reps: 8 - 12 • Descanso: 90s',
+                        title: t.goalHypertrophy,
+                        desc: t.goalHypertrophyDesc,
+                        badge: lang === 'en' ? 'Reps: 8 - 12 • Rest: 90s' : 'Reps: 8 - 12 • Descanso: 90s',
                       },
                       {
                         key: 'fuerza' as WizardGoal,
                         icon: Zap,
-                        title: 'Fuerza Máxima & Cargas Pesadas',
-                        desc: 'Rango de 4-6 repeticiones. Prioridad en levantamientos básicos pesados, alta intensidad y reclutamiento neuromuscular.',
-                        badge: 'Reps: 4 - 6 • Descanso: 120s',
+                        title: t.goalStrength,
+                        desc: t.goalStrengthDesc,
+                        badge: lang === 'en' ? 'Reps: 4 - 6 • Rest: 120s' : 'Reps: 4 - 6 • Descanso: 120s',
                       },
                       {
                         key: 'acondicionamiento' as WizardGoal,
                         icon: Sparkles,
-                        title: 'Acondicionamiento & Quema Calórica',
-                        desc: 'Rango de 12-15 repeticiones. Mayor densidad de trabajo, descansos activos y resistencia a la fatiga muscular.',
-                        badge: 'Reps: 12 - 15 • Descanso: 60s',
+                        title: t.goalConditioning,
+                        desc: t.goalConditioningDesc,
+                        badge: lang === 'en' ? 'Reps: 12 - 15 • Rest: 60s' : 'Reps: 12 - 15 • Descanso: 60s',
                       },
                     ].map((item) => {
                       const isSelected = wizardConfig.goal === item.key;
@@ -5659,10 +5902,12 @@ export default function App() {
               {wizardStep === 4 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">Paso 4 de 4</span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¿Cuál es tu nivel de experiencia?</h3>
+                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">
+                      {lang === 'en' ? 'Step 4 of 4' : 'Paso 4 de 4'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">{t.wizardStep4Title}</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                      Calibra el número de series base y el volumen de trabajo por sesión para mantener un estímulo efectivo sin sobreentrenar.
+                      {t.wizardStep4Sub}
                     </p>
                   </div>
 
@@ -5670,21 +5915,21 @@ export default function App() {
                     {[
                       {
                         key: 'principiante' as WizardLevel,
-                        title: 'Principiante (< 1 año)',
-                        desc: '3 series base por ejercicio. Enfoque en dominar la técnica de los movimientos y progresión de carga segura.',
-                        badge: '3 series base • Progresión gradual',
+                        title: t.levelBeginner,
+                        desc: t.levelBeginnerDesc,
+                        badge: lang === 'en' ? '3 base sets • Gradual progression' : '3 series base • Progresión gradual',
                       },
                       {
                         key: 'intermedio' as WizardLevel,
-                        title: 'Intermedio (1 a 3 años)',
-                        desc: '3 a 4 series base. Balance óptimo de sobrecarga progresiva lineal y volumen de trabajo.',
-                        badge: '3-4 series • Sobrecarga lineal',
+                        title: t.levelIntermediate,
+                        desc: t.levelIntermediateDesc,
+                        badge: lang === 'en' ? '3-4 sets • Linear progression' : '3-4 series • Sobrecarga lineal',
                       },
                       {
                         key: 'avanzado' as WizardLevel,
-                        title: 'Avanzado (> 3 años)',
-                        desc: '4 series efectivas con alta intensidad, mayor densidad y variedad de ángulos.',
-                        badge: '4 series • Alto volumen',
+                        title: t.levelAdvanced,
+                        desc: t.levelAdvancedDesc,
+                        badge: lang === 'en' ? '4 sets • High volume' : '4 series • Alto volumen',
                       },
                     ].map((item) => {
                       const isSelected = wizardConfig.level === item.key;
@@ -5725,30 +5970,44 @@ export default function App() {
               {wizardStep === 5 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">Revisión Final</span>
-                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">¡Tu programa inteligente está listo!</h3>
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                      {lang === 'en' ? 'Final Review' : 'Revisión Final'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mt-1">{t.wizardStep5Title}</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                      El algoritmo local ha generado {generateIntelligentRoutines(wizardConfig, exercises).length} rutinas totalmente adaptadas a tus parámetros.
+                      {t.wizardStep5Sub}
                     </p>
                   </div>
 
                   {/* Resumen de Parámetros */}
                   <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
                     <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
-                      {wizardConfig.days} Días / Semana
+                      {wizardConfig.days} {lang === 'en' ? 'Days / Week' : 'Días / Semana'}
                     </span>
                     <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
-                      {wizardConfig.equipment.replace('_', ' ')}
+                      {wizardConfig.equipment === 'gimnasio_completo'
+                        ? t.equipFullGym
+                        : wizardConfig.equipment === 'solo_mancuernas'
+                        ? t.equipDumbbellsOnly
+                        : t.equipBodyweightHome}
                     </span>
                     <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
-                      {wizardConfig.goal}
+                      {wizardConfig.goal === 'hipertrofia'
+                        ? t.goalHypertrophy
+                        : wizardConfig.goal === 'fuerza'
+                        ? t.goalStrength
+                        : t.goalConditioning}
                     </span>
                     <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2.5 py-1 rounded-lg font-bold uppercase text-[10px]">
-                      {wizardConfig.level}
+                      {wizardConfig.level === 'principiante'
+                        ? t.levelBeginner
+                        : wizardConfig.level === 'intermedio'
+                        ? t.levelIntermediate
+                        : t.levelAdvanced}
                     </span>
                     <span className="ml-auto text-[11px] font-bold text-slate-400 flex items-center gap-1">
                       <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                      Calculado al instante
+                      {lang === 'en' ? 'Calculated instantly' : 'Calculado al instante'}
                     </span>
                   </div>
 
@@ -5756,7 +6015,7 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {generateIntelligentRoutines(wizardConfig, exercises).map((rot, idx) => {
                       const dayStyle = getDayBadgeStyle(rot.dayOfWeek);
-                      const dayLabel = getDayLabel(rot.dayOfWeek);
+                      const dayLabel = getDayLabel(rot.dayOfWeek, lang);
                       return (
                         <div
                           key={idx}
@@ -5779,17 +6038,19 @@ export default function App() {
                             <p className="text-[11px] text-slate-400 mb-3">{rot.description}</p>
                             <div className="text-xs text-slate-300 space-y-1 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
                               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-                                {rot.exerciseIds.length} Ejercicios Asignados:
+                                {lang === 'en'
+                                  ? `${rot.exerciseIds.length} Assigned Exercises:`
+                                  : `${rot.exerciseIds.length} Ejercicios Asignados:`}
                               </span>
                               {rot.exerciseIds.map((exId, exi) => {
                                 const ex = exercises.find((e) => e.id === exId);
                                 return (
                                   <div key={exi} className="flex items-center justify-between text-xs py-0.5">
                                     <span className="truncate text-slate-200">
-                                      • {ex?.name || 'Ejercicio'}
+                                      • {ex ? getExerciseName(ex, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
                                     </span>
                                     <span className="text-[10px] text-slate-500 font-mono capitalize shrink-0 ml-2">
-                                      {ex?.equipment}
+                                      {ex ? getEquipmentBadge(ex.equipment, lang).label : ''}
                                     </span>
                                   </div>
                                 );
@@ -5803,7 +6064,9 @@ export default function App() {
 
                   {/* Selector: Reemplazar o Añadir */}
                   <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2.5 text-xs">
-                    <span className="font-bold text-slate-300 block">¿Cómo deseas aplicar este plan?</span>
+                    <span className="font-bold text-slate-300 block">
+                      {lang === 'en' ? 'How would you like to apply this plan?' : '¿Cómo deseas aplicar este plan?'}
+                    </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <button
                         type="button"
@@ -5814,7 +6077,7 @@ export default function App() {
                             : 'bg-slate-950 text-slate-400 border-slate-800'
                         }`}
                       >
-                        <span>Reemplazar rutinas actuales</span>
+                        <span>{t.wizardModeReplace}</span>
                         {wizardReplaceMode === 'replace' && <Check className="w-4 h-4 text-emerald-400" />}
                       </button>
                       <button
@@ -5826,7 +6089,7 @@ export default function App() {
                             : 'bg-slate-950 text-slate-400 border-slate-800'
                         }`}
                       >
-                        <span>Añadir a las rutinas existentes</span>
+                        <span>{t.wizardModeAppend}</span>
                         {wizardReplaceMode === 'append' && <Check className="w-4 h-4 text-emerald-400" />}
                       </button>
                     </div>
@@ -5856,7 +6119,7 @@ export default function App() {
                   }`}
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Atrás</span>
+                  <span>{t.wizardBackBtn}</span>
                 </button>
               ) : (
                 <button
@@ -5868,12 +6131,12 @@ export default function App() {
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                   }`}
                 >
-                  Cancelar
+                  {t.cancel}
                 </button>
               )}
 
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-bold">
-                <span>Paso {wizardStep} de 5</span>
+                <span>{lang === 'en' ? `Step ${wizardStep} of 5` : `Paso ${wizardStep} de 5`}</span>
               </div>
 
               {wizardStep < 5 ? (
@@ -5882,7 +6145,7 @@ export default function App() {
                   onClick={() => setWizardStep((p) => (p + 1) as any)}
                   className="flex-1 sm:flex-none sm:min-w-48 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-1.5"
                 >
-                  <span>Siguiente Paso</span>
+                  <span>{t.wizardNextBtn}</span>
                   <ChevronRight className="w-4 h-4 stroke-[3]" />
                 </button>
               ) : (
@@ -5892,7 +6155,7 @@ export default function App() {
                   className="flex-1 sm:flex-none sm:min-w-64 py-3.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-emerald-500/25 active:scale-95 transition flex items-center justify-center gap-2"
                 >
                   <Sparkles className="w-4 h-4 stroke-[2.5]" />
-                  <span>Aplicar Plan de Entrenamiento</span>
+                  <span>{t.wizardGenerateBtn}</span>
                 </button>
               )}
             </div>
@@ -5913,7 +6176,7 @@ export default function App() {
             }`}
           >
             <Layers className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Rutinas</span>
+            <span className="text-[10px] tracking-tight">{t.tabRoutines}</span>
           </button>
 
           {/* 2. Tracker Entreno */}
@@ -5927,7 +6190,7 @@ export default function App() {
               <span className="absolute top-0 right-2 w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             )}
             <Activity className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Entreno</span>
+            <span className="text-[10px] tracking-tight">{t.tabWorkout}</span>
           </button>
 
           {/* 3. Catálogo Ejercicios */}
@@ -5938,7 +6201,7 @@ export default function App() {
             }`}
           >
             <Dumbbell className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Ejercicios</span>
+            <span className="text-[10px] tracking-tight">{t.tabExercises}</span>
           </button>
 
           {/* 4. Historial & Progreso */}
@@ -5949,7 +6212,7 @@ export default function App() {
             }`}
           >
             <TrendingUp className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Progreso</span>
+            <span className="text-[10px] tracking-tight">{t.tabProgress}</span>
           </button>
 
           {/* 5. Ajustes */}
@@ -5960,7 +6223,7 @@ export default function App() {
             }`}
           >
             <SettingsIcon className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Ajustes</span>
+            <span className="text-[10px] tracking-tight">{t.tabSettings}</span>
           </button>
         </div>
       </nav>
