@@ -63,6 +63,14 @@ export interface Translations {
   addSetBtn: string;
   addExerciseToSession: string;
   swapExerciseBtn: string;
+  deleteExerciseModalTitle: string;
+  deleteExerciseModalDesc: (exerciseName: string) => string;
+  deleteExerciseModalRoutineNote: string;
+  deleteExerciseConfirm: string;
+  deleteExerciseCancel: string;
+  finishExerciseBtn: string;
+  exerciseFinishedBadge: string;
+  reopenExerciseBtn: string;
   overloadSuggestion: (kg: number, reps: number) => string;
   setColHeader: string;
   prevColHeader: string;
@@ -295,6 +303,14 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     addSetBtn: '+ Añadir Serie',
     addExerciseToSession: 'Añadir Ejercicio a la Sesión',
     swapExerciseBtn: 'Cambiar Ejercicio',
+    deleteExerciseModalTitle: '¿Eliminar Ejercicio?',
+    deleteExerciseModalDesc: (name) => `¿Seguro que deseas eliminar «${name}» de esta sesión de entrenamiento?`,
+    deleteExerciseModalRoutineNote: 'Nota: Si proviene de una rutina guardada, también se quitará de la plantilla para próximos entrenamientos.',
+    deleteExerciseConfirm: 'Sí, Eliminar',
+    deleteExerciseCancel: 'Cancelar',
+    finishExerciseBtn: 'Terminar Ejercicio',
+    exerciseFinishedBadge: 'Ejercicio Acabado',
+    reopenExerciseBtn: 'Reabrir Ejercicio',
     overloadSuggestion: (kg, reps) => `💡 Sugerencia: Intenta +${kg} kg o +${reps} rep hoy`,
     setColHeader: 'SERIE',
     prevColHeader: 'PREVIO',
@@ -526,6 +542,14 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     addSetBtn: '+ Add Set',
     addExerciseToSession: 'Add Exercise to Session',
     swapExerciseBtn: 'Swap Exercise',
+    deleteExerciseModalTitle: 'Remove Exercise?',
+    deleteExerciseModalDesc: (name) => `Are you sure you want to remove "${name}" from this workout session?`,
+    deleteExerciseModalRoutineNote: 'Note: If it belongs to a saved routine, it will also be removed from the template for future workouts.',
+    deleteExerciseConfirm: 'Yes, Remove',
+    deleteExerciseCancel: 'Cancel',
+    finishExerciseBtn: 'Finish Exercise',
+    exerciseFinishedBadge: 'Exercise Finished',
+    reopenExerciseBtn: 'Reopen Exercise',
     overloadSuggestion: (kg, reps) => `💡 Suggestion: Try +${kg} kg or +${reps} rep today`,
     setColHeader: 'SET',
     prevColHeader: 'PREV',

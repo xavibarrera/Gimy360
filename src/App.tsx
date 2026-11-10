@@ -51,7 +51,8 @@ import {
   Share2,
   Camera,
   ExternalLink,
-  Globe
+  Globe,
+  CheckCircle2
 } from 'lucide-react';
 import {
   Language,
@@ -158,6 +159,8 @@ export interface WorkoutExercise {
   exerciseId: string;
   notes?: string;
   sets: WorkoutSet[];
+  isCompleted?: boolean;
+  completedAt?: number;
 }
 
 export interface WorkoutSession {
@@ -1617,6 +1620,10 @@ export default function App() {
   const [isRoutineEditorOpen, setIsRoutineEditorOpen] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<WorkoutSession | null>(null);
   const [showCancelWorkoutModal, setShowCancelWorkoutModal] = useState<boolean>(false);
+  const [exerciseToDeleteFromWorkout, setExerciseToDeleteFromWorkout] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [selectedRoutineDetail, setSelectedRoutineDetail] = useState<Routine | null>(null);
   const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null);
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
@@ -1933,9 +1940,11 @@ export default function App() {
     setShowAddExerciseModal(false);
   };
 
-  // Quitar ejercicio del entreno activo
-  const handleRemoveExerciseFromWorkout = (exerciseIndex: number) => {
+  // Quitar ejercicio del entreno activo (por identificador de ejercicio)
+  const handleRemoveExerciseFromWorkout = (workoutExId: string) => {
     if (!activeWorkout) return;
+    const exerciseIndex = activeWorkout.exercises.findIndex((e) => e.id === workoutExId);
+    if (exerciseIndex === -1) return;
     const targetEx = activeWorkout.exercises[exerciseIndex];
     const updated = [...activeWorkout.exercises];
     updated.splice(exerciseIndex, 1);
@@ -1956,6 +1965,56 @@ export default function App() {
           return r;
         })
       );
+    }
+  };
+
+  // Confirmar y procesar la eliminación del ejercicio seleccionado en el modal
+  const handleConfirmRemoveExercise = () => {
+    if (!exerciseToDeleteFromWorkout) return;
+    handleRemoveExerciseFromWorkout(exerciseToDeleteFromWorkout.id);
+    setExerciseToDeleteFromWorkout(null);
+  };
+
+  // Confirmar que el ejercicio se ha acabado o reabrirlo
+  const handleToggleExerciseFinished = (workoutExId: string) => {
+    if (!activeWorkout) return;
+    const ex = activeWorkout.exercises.find((e) => e.id === workoutExId);
+    if (!ex) return;
+
+    const nextCompletedState = !ex.isCompleted;
+
+    const updatedExercises = activeWorkout.exercises.map((e) => {
+      if (e.id === workoutExId) {
+        // Al marcarlo como finalizado, asegurarse de que las series se marquen completadas para el historial
+        const updatedSets = nextCompletedState
+          ? e.sets.map((s) => ({
+              ...s,
+              completed: true,
+              completedAt: s.completedAt || Date.now(),
+            }))
+          : e.sets;
+
+        return {
+          ...e,
+          isCompleted: nextCompletedState,
+          completedAt: nextCompletedState ? Date.now() : undefined,
+          sets: updatedSets,
+        };
+      }
+      return e;
+    });
+
+    setActiveWorkout({
+      ...activeWorkout,
+      exercises: updatedExercises,
+    });
+
+    // Si se marca como terminado, colapsar el ejercicio para mantener limpia y enfocada la vista
+    if (nextCompletedState) {
+      setExpandedExerciseIds((prev) => ({
+        ...prev,
+        [workoutExId]: false,
+      }));
     }
   };
 
@@ -2393,6 +2452,21 @@ export default function App() {
     }
     setRoutineToDelete(null);
   };
+
+  // Ejercicios del entreno activo ordenados: los ejercicios pendientes arriba y los finalizados abajo
+  const sortedWorkoutExercises = useMemo(() => {
+    if (!activeWorkout) return [];
+    const pending: WorkoutExercise[] = [];
+    const completed: WorkoutExercise[] = [];
+    for (const ex of activeWorkout.exercises) {
+      if (ex.isCompleted) {
+        completed.push(ex);
+      } else {
+        pending.push(ex);
+      }
+    }
+    return [...pending, ...completed];
+  }, [activeWorkout?.exercises]);
 
   // Rutinas ordenadas por día de la semana (Lunes a Domingo, y luego sin día) y alfabéticamente
   const sortedRoutines = useMemo(() => {
@@ -3333,9 +3407,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Lista de Ejercicios del Entreno Activo (Acordeón Colapsable) */}
+                {/* Lista de Ejercicios del Entreno Activo (Acordeón Colapsable con Ejercicios Acabados al Final) */}
                 <div className="space-y-3">
-                  {activeWorkout.exercises.map((workoutEx, exIdx) => {
+                  {sortedWorkoutExercises.map((workoutEx, displayIdx) => {
+                    const exIdx = activeWorkout.exercises.findIndex((e) => e.id === workoutEx.id);
                     const exerciseInfo = exercises.find((e) => e.id === workoutEx.exerciseId);
                     const previousSets = getPreviousExerciseSets(workoutEx.exerciseId);
                     const isExpanded = !!expandedExerciseIds[workoutEx.id];
@@ -3347,8 +3422,10 @@ export default function App() {
                     return (
                       <div
                         key={workoutEx.id}
-                        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-200 shadow-md ${
-                          isAllCompleted
+                        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-300 shadow-md ${
+                          workoutEx.isCompleted
+                            ? 'border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 bg-slate-900/95 ring-1 ring-emerald-500/30'
+                            : isAllCompleted
                             ? 'border-emerald-500/40 bg-slate-900/90'
                             : isExpanded
                             ? 'border-slate-700 bg-slate-900 ring-1 ring-emerald-500/20'
@@ -3364,16 +3441,24 @@ export default function App() {
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span
                               className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
-                                isAllCompleted
+                                workoutEx.isCompleted
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+                                  : isAllCompleted
                                   ? 'bg-emerald-500 text-slate-950 border-emerald-400'
                                   : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                               }`}
                             >
-                              {isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : exIdx + 1}
+                              {workoutEx.isCompleted || isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : displayIdx + 1}
                             </span>
                             <h3 className="text-sm sm:text-base font-extrabold text-white truncate min-w-0 flex-1">
                               {exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
                             </h3>
+                            {workoutEx.isCompleted && (
+                              <span className="shrink-0 text-[10px] font-black text-emerald-400 bg-emerald-500/15 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span className="hidden xs:inline">{t.exerciseFinishedBadge}</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y acciones a la derecha */}
@@ -3399,14 +3484,14 @@ export default function App() {
                               {/* Badge de Progreso de Series */}
                               <span
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
-                                  isAllCompleted
+                                  workoutEx.isCompleted || isAllCompleted
                                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
                                     : completedSetsCount > 0
                                     ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
                                     : 'bg-slate-800 text-slate-400 border-slate-700/80'
                                 }`}
                               >
-                                {isAllCompleted ? (
+                                {workoutEx.isCompleted || isAllCompleted ? (
                                   <>
                                     <Check className="w-3 h-3 stroke-[3]" /> {lang === 'en' ? 'Done' : 'Completo'}
                                   </>
@@ -3429,14 +3514,40 @@ export default function App() {
                                 <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">{t.swapExerciseBtn}</span>
                               </button>
 
-                              {/* Botón Eliminar Ejercicio */}
+                              {/* Botón Confirmar Fin de Ejercicio */}
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleRemoveExerciseFromWorkout(exIdx);
+                                  handleToggleExerciseFinished(workoutEx.id);
+                                }}
+                                className={`p-1.5 px-2 rounded-lg text-[10px] font-black flex items-center gap-1 active:scale-95 transition border ${
+                                  workoutEx.isCompleted
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
+                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                                }`}
+                                title={
+                                  workoutEx.isCompleted
+                                    ? (lang === 'en' ? 'Click to reopen exercise' : 'Clic para reabrir ejercicio')
+                                    : (lang === 'en' ? 'Confirm exercise finished' : 'Confirmar que el ejercicio se ha acabado')
+                                }
+                              >
+                                <CheckCircle2 className={`w-3.5 h-3.5 ${workoutEx.isCompleted ? 'fill-emerald-400/30' : ''}`} />
+                                <span className="hidden sm:inline">
+                                  {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
+                                </span>
+                              </button>
+
+                              {/* Botón Eliminar Ejercicio (abre modal de confirmación) */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const exName = exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
+                                  setExerciseToDeleteFromWorkout({ id: workoutEx.id, name: exName });
                                 }}
                                 className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
-                                title="Eliminar este ejercicio"
+                                title={lang === 'en' ? 'Remove this exercise' : 'Eliminar este ejercicio'}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -3637,16 +3748,36 @@ export default function App() {
                               })}
                             </div>
 
-                            {/* Botón "+ Añadir Serie" */}
-                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                            {/* Botones de acción al pie del ejercicio: Añadir Serie, Confirmar Fin de Ejercicio y Plegar */}
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddSet(exIdx)}
+                                  className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
+                                >
+                                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{t.addSetBtn}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExerciseFinished(workoutEx.id)}
+                                  className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-xl border active:scale-95 transition shadow-sm ${
+                                    workoutEx.isCompleted
+                                      ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                      : 'bg-emerald-500 text-slate-950 border-emerald-400 hover:bg-emerald-400 shadow-emerald-500/20'
+                                  }`}
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>
+                                    {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
+                                  </span>
+                                </button>
+                              </div>
+
                               <button
-                                onClick={() => handleAddSet(exIdx)}
-                                className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
-                              >
-                                <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>{t.addSetBtn}</span>
-                              </button>
-                              <button
+                                type="button"
                                 onClick={() => toggleExerciseExpand(workoutEx.id)}
                                 className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
                               >
@@ -5080,6 +5211,46 @@ export default function App() {
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
               >
                 {t.cancelWorkoutConfirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL: CONFIRMAR ELIMINAR EJERCICIO DEL ENTRENO ACTIVO
+          ========================================================================== */}
+      {exerciseToDeleteFromWorkout && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">{t.deleteExerciseModalTitle}</h3>
+              <p className="text-xs text-slate-300 mt-2 font-medium">
+                {t.deleteExerciseModalDesc(exerciseToDeleteFromWorkout.name)}
+              </p>
+              {activeWorkout?.routineId && (
+                <p className="text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 mt-2.5 leading-relaxed text-left">
+                  {t.deleteExerciseModalRoutineNote}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setExerciseToDeleteFromWorkout(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+              >
+                {t.deleteExerciseCancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveExercise}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/25 active:scale-95 transition"
+              >
+                {t.deleteExerciseConfirm}
               </button>
             </div>
           </div>
