@@ -241,6 +241,18 @@ export interface Translations {
   languageSub: string;
   langSpanish: string;
   langEnglishUk: string;
+  bilboSettingTitle: string;
+  supersetsSettingTitle: string;
+  bilboModeBtn: string;
+  bilboBadge: string;
+  bilboSuggestionBanner: (weight: number, unit: string, prevWeight: number, prevReps: number) => string;
+  bilboCycleFinishedAlert: string;
+  bilboSingleSetNote: string;
+  supersetGroupBtn: string;
+  supersetConfirmBtn: (group: string) => string;
+  supersetUnlinkBtn: string;
+  supersetLabel: (group: string) => string;
+  supersetSelectHint: string;
   dataManagementHeading: string;
   exportDataBtn: string;
   importDataBtn: string;
@@ -494,6 +506,20 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     languageSub: 'Selecciona tu idioma preferido para la interfaz',
     langSpanish: 'Español 🇪🇸',
     langEnglishUk: 'English (UK) 🇬🇧',
+    bilboSettingTitle: 'Método Bilbo (Serie B)',
+    supersetsSettingTitle: 'Superseries (A1 + A2)',
+    bilboModeBtn: 'Modo Bilbo',
+    bilboBadge: 'Serie Bilbo (Explosiva)',
+    bilboSuggestionBanner: (weight, unit, prevWeight, prevReps) =>
+      `⚡ Método Bilbo: Hoy toca ${weight} ${unit} (+2.5 ${unit} respecto a ${prevWeight} ${unit} × ${prevReps} reps)`,
+    bilboCycleFinishedAlert:
+      '🎉 ¡Ciclo Bilbo Finalizado! Se sugiere semana de descarga e iniciar un nuevo ciclo con peso base',
+    bilboSingleSetNote: '1 serie principal explosiva (Modo Bilbo)',
+    supersetGroupBtn: '🔗 Agrupar en Superserie',
+    supersetConfirmBtn: (group) => `Vincular Superserie ${group}`,
+    supersetUnlinkBtn: 'Desvincular',
+    supersetLabel: (group) => `Superserie ${group}`,
+    supersetSelectHint: 'Selecciona 2 o más ejercicios para vincularlos en superserie',
     dataManagementHeading: 'Gestión de Datos',
     exportDataBtn: 'Exportar Backup (JSON)',
     importDataBtn: 'Restaurar Backup (JSON)',
@@ -746,6 +772,20 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     languageSub: 'Choose your interface language',
     langSpanish: 'Español 🇪🇸',
     langEnglishUk: 'English (UK) 🇬🇧',
+    bilboSettingTitle: 'Bilbo Method (Set Type B)',
+    supersetsSettingTitle: 'Supersets (A1 + A2)',
+    bilboModeBtn: 'Bilbo Mode',
+    bilboBadge: 'Bilbo Set (Explosive)',
+    bilboSuggestionBanner: (weight, unit, prevWeight, prevReps) =>
+      `⚡ Bilbo Method: Target ${weight} ${unit} today (+2.5 ${unit} from ${prevWeight} ${unit} × ${prevReps} reps)`,
+    bilboCycleFinishedAlert:
+      '🎉 Bilbo Cycle Complete! A deload week is suggested before starting a new cycle at base weight',
+    bilboSingleSetNote: '1 main explosive working set (Bilbo Mode)',
+    supersetGroupBtn: '🔗 Group in Superset',
+    supersetConfirmBtn: (group) => `Link Superset ${group}`,
+    supersetUnlinkBtn: 'Unlink',
+    supersetLabel: (group) => `Superset ${group}`,
+    supersetSelectHint: 'Select 2 or more exercises to link into a superset',
     dataManagementHeading: 'Data Management',
     exportDataBtn: 'Export Backup (JSON)',
     importDataBtn: 'Restore Backup (JSON)',

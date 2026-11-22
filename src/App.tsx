@@ -52,7 +52,11 @@ import {
   Camera,
   ExternalLink,
   Globe,
-  CheckCircle2
+  CheckCircle2,
+  Link2,
+  Unlink,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import {
   Language,
@@ -134,7 +138,7 @@ export function getDayShort(day?: DayOfWeek, lang: Language = 'es'): string {
   return esShort[day] || day;
 }
 
-export type SetType = 'N' | 'W' | 'F' | 'D'; // Normal, Warmup (Calentamiento), Failure (Fallo), Drop-set
+export type SetType = 'N' | 'W' | 'F' | 'D' | 'B'; // Normal, Warmup (Calentamiento), Failure (Fallo), Drop-set, Bilbo
 
 export interface Exercise {
   id: string;
@@ -165,6 +169,8 @@ export interface WorkoutExercise {
   completedAt?: number;
   includeBodyweight?: boolean;
   bodyweightKg?: number;
+  isBilbo?: boolean;
+  supersetGroupId?: string;
 }
 
 export interface WorkoutSession {
@@ -184,6 +190,7 @@ export interface Routine {
   category: string;
   description: string;
   exerciseIds: string[];
+  supersetGroups?: Record<string, string>; // Mapa exerciseId -> letra de grupo ('A', 'B', ...)
   dayOfWeek?: DayOfWeek;
   isCustom?: boolean;
 }
@@ -193,6 +200,8 @@ export interface AppSettings {
   defaultRestTime: number; // segundos
   autoStartRestTimer?: boolean;
   userBodyweight?: number; // Peso corporal para ejercicios de calistenia
+  enableBilboMethod?: boolean; // Opcional (desactivado por defecto)
+  enableSupersets?: boolean; // Opcional (desactivado por defecto)
   soundEnabled: boolean;
   vibrateEnabled: boolean;
   theme?: 'dark' | 'light';
@@ -956,6 +965,84 @@ export function getProgressiveOverloadFeedback(
   };
 }
 
+export interface BilboFeedback {
+  hasBilboHistory: boolean;
+  previousWeight: number;
+  previousReps: number;
+  suggestedWeight: number;
+  cycleEnded: boolean;
+}
+
+export function getBilboFeedback(
+  exerciseId: string,
+  history: WorkoutSession[],
+  unit: 'kg' | 'lb'
+): BilboFeedback {
+  const step = unit === 'kg' ? 2.5 : 5;
+  for (const session of history) {
+    const match = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!match || !match.sets || match.sets.length === 0) continue;
+    const bilboSet = match.sets.find((s) => s.completed && s.type === 'B');
+    if (bilboSet) {
+      const cycleEnded = bilboSet.reps > 0 && bilboSet.reps <= 15;
+      return {
+        hasBilboHistory: true,
+        previousWeight: bilboSet.weight,
+        previousReps: bilboSet.reps,
+        suggestedWeight: cycleEnded ? Math.round((bilboSet.weight * 0.6) / 2.5) * 2.5 : bilboSet.weight + step,
+        cycleEnded,
+      };
+    }
+  }
+  return {
+    hasBilboHistory: false,
+    previousWeight: 0,
+    previousReps: 0,
+    suggestedWeight: 0,
+    cycleEnded: false,
+  };
+}
+
+export function getSupersetStyle(groupId?: string): {
+  container: string;
+  headerBg: string;
+  badge: string;
+  text: string;
+} {
+  switch (groupId) {
+    case 'B':
+      return {
+        container: 'border-purple-500/50 bg-purple-950/20',
+        headerBg: 'bg-purple-500/10 border-b border-purple-500/25',
+        badge: 'bg-purple-500 text-slate-950 border-purple-400',
+        text: 'text-purple-300',
+      };
+    case 'C':
+      return {
+        container: 'border-amber-500/50 bg-amber-950/20',
+        headerBg: 'bg-amber-500/10 border-b border-amber-500/25',
+        badge: 'bg-amber-500 text-slate-950 border-amber-400',
+        text: 'text-amber-300',
+      };
+    default:
+      return {
+        container: 'border-cyan-500/50 bg-cyan-950/20',
+        headerBg: 'bg-cyan-500/10 border-b border-cyan-500/25',
+        badge: 'bg-cyan-500 text-slate-950 border-cyan-400',
+        text: 'text-cyan-300',
+      };
+  }
+}
+
+export function getNextSupersetLetter(usedGroups: Iterable<string>): string {
+  const used = new Set(usedGroups);
+  const alphabet = ['A', 'B', 'C', 'D', 'E', 'F'];
+  for (const letter of alphabet) {
+    if (!used.has(letter)) return letter;
+  }
+  return `S${used.size + 1}`;
+}
+
 /* ==========================================================================
    UTILIDADES & HELPERS
    ========================================================================== */
@@ -1627,6 +1714,8 @@ export default function App() {
           defaultRestTime: parsed.defaultRestTime || 90,
           autoStartRestTimer: parsed.autoStartRestTimer ?? true,
           userBodyweight: parsed.userBodyweight ?? 75,
+          enableBilboMethod: parsed.enableBilboMethod ?? false,
+          enableSupersets: parsed.enableSupersets ?? false,
           soundEnabled: parsed.soundEnabled ?? true,
           vibrateEnabled: parsed.vibrateEnabled ?? true,
           theme: parsed.theme || 'dark',
@@ -1641,6 +1730,8 @@ export default function App() {
       defaultRestTime: 90,
       autoStartRestTimer: true,
       userBodyweight: 75,
+      enableBilboMethod: false,
+      enableSupersets: false,
       soundEnabled: true,
       vibrateEnabled: true,
       theme: 'dark',
@@ -1739,6 +1830,16 @@ export default function App() {
 
   // Control de ejercicios expandidos/colapsados en el entreno activo (por defecto todos colapsados)
   const [expandedExerciseIds, setExpandedExerciseIds] = useState<Record<string, boolean>>({});
+
+  // Alerta de fin de ciclo Bilbo (reps <= 15) y vinculación de superseries en entreno activo
+  const [bilboCycleAlert, setBilboCycleAlert] = useState<{
+    exerciseName: string;
+    reps: number;
+    weight: number;
+  } | null>(null);
+  const [isLinkingWorkoutSuperset, setIsLinkingWorkoutSuperset] = useState<boolean>(false);
+  const [selectedWorkoutExIdsForSuperset, setSelectedWorkoutExIdsForSuperset] = useState<string[]>([]);
+  const [focusedSupersetExId, setFocusedSupersetExId] = useState<string | null>(null);
 
   const toggleExerciseExpand = (exerciseWorkoutId: string) => {
     setExpandedExerciseIds((prev) => ({
@@ -1919,31 +2020,57 @@ export default function App() {
   // Iniciar entrenamiento desde una rutina
   const handleStartRoutineWorkout = (routine: Routine) => {
     const defaultBw = settings.userBodyweight ?? 75;
+    const groupCounts: Record<string, number> = {};
+    if (routine.supersetGroups) {
+      routine.exerciseIds.forEach((id) => {
+        const g = routine.supersetGroups?.[id];
+        if (g) groupCounts[g] = (groupCounts[g] || 0) + 1;
+      });
+    }
+
     const initialExercises: WorkoutExercise[] = routine.exerciseIds.map((exId, idx) => {
       const exMeta = exercises.find((e) => e.id === exId);
       const isBw = exMeta?.equipment === 'corporal';
-      // Buscar datos de la última sesión para este ejercicio para precargar series de referencia
       const lastSessionSets = getPreviousExerciseSets(exId);
-      const defaultSets: WorkoutSet[] =
-        lastSessionSets.length > 0
-          ? [
-              {
-                id: `set-${idx}-0-${Date.now()}`,
-                type: lastSessionSets[0].type || 'N',
-                weight: lastSessionSets[0].weight,
-                reps: lastSessionSets[0].reps,
-                completed: false,
-              },
-            ]
-          : [
-              { id: `set-${idx}-0-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
-            ];
+      const bilboInfo = settings.enableBilboMethod
+        ? getBilboFeedback(exId, history, settings.unit)
+        : null;
+      const shouldStartBilbo = Boolean(settings.enableBilboMethod && bilboInfo?.hasBilboHistory);
+
+      const defaultSets: WorkoutSet[] = shouldStartBilbo && bilboInfo
+        ? [
+            {
+              id: `set-${idx}-0-${Date.now()}`,
+              type: 'B',
+              weight: !bilboInfo.cycleEnded ? bilboInfo.suggestedWeight : bilboInfo.previousWeight,
+              reps: 0,
+              completed: false,
+            },
+          ]
+        : lastSessionSets.length > 0
+        ? [
+            {
+              id: `set-${idx}-0-${Date.now()}`,
+              type: lastSessionSets[0].type === 'B' && !settings.enableBilboMethod ? 'N' : (lastSessionSets[0].type || 'N'),
+              weight: lastSessionSets[0].weight,
+              reps: lastSessionSets[0].reps,
+              completed: false,
+            },
+          ]
+        : [
+            { id: `set-${idx}-0-${Date.now()}`, type: 'N', weight: 0, reps: 0, completed: false },
+          ];
+
+      const groupId = routine.supersetGroups?.[exId];
+      const validGroupId = groupId && (groupCounts[groupId] || 0) >= 2 ? groupId : undefined;
 
       return {
         id: `we-${idx}-${Date.now()}`,
         exerciseId: exId,
         sets: defaultSets,
         ...(isBw ? { includeBodyweight: true, bodyweightKg: defaultBw } : {}),
+        ...(shouldStartBilbo ? { isBilbo: true } : {}),
+        ...(validGroupId ? { supersetGroupId: validGroupId } : {}),
       };
     });
 
@@ -1957,6 +2084,9 @@ export default function App() {
       totalPausedTime: 0,
     };
 
+    setBilboCycleAlert(null);
+    setIsLinkingWorkoutSuperset(false);
+    setSelectedWorkoutExIdsForSuperset([]);
     setActiveWorkout(newWorkout);
     setElapsedWorkoutSeconds(0);
     setActiveTab('entreno');
@@ -1980,26 +2110,41 @@ export default function App() {
     const isBw = exMeta?.equipment === 'corporal';
     const defaultBw = settings.userBodyweight ?? 75;
     const lastSessionSets = getPreviousExerciseSets(exerciseId);
-    const initialSets: WorkoutSet[] =
-      lastSessionSets.length > 0
-        ? [
-            {
-              id: `set-${Date.now()}-0`,
-              type: lastSessionSets[0].type || 'N',
-              weight: lastSessionSets[0].weight,
-              reps: lastSessionSets[0].reps,
-              completed: false,
-            },
-          ]
-        : [
-            { id: `set-${Date.now()}-0`, type: 'N', weight: 0, reps: 0, completed: false },
-          ];
+    const bilboInfo = settings.enableBilboMethod
+      ? getBilboFeedback(exerciseId, history, settings.unit)
+      : null;
+    const shouldStartBilbo = Boolean(settings.enableBilboMethod && bilboInfo?.hasBilboHistory);
+
+    const initialSets: WorkoutSet[] = shouldStartBilbo && bilboInfo
+      ? [
+          {
+            id: `set-${Date.now()}-0`,
+            type: 'B',
+            weight: !bilboInfo.cycleEnded ? bilboInfo.suggestedWeight : bilboInfo.previousWeight,
+            reps: 0,
+            completed: false,
+          },
+        ]
+      : lastSessionSets.length > 0
+      ? [
+          {
+            id: `set-${Date.now()}-0`,
+            type: lastSessionSets[0].type === 'B' && !settings.enableBilboMethod ? 'N' : (lastSessionSets[0].type || 'N'),
+            weight: lastSessionSets[0].weight,
+            reps: lastSessionSets[0].reps,
+            completed: false,
+          },
+        ]
+      : [
+          { id: `set-${Date.now()}-0`, type: 'N', weight: 0, reps: 0, completed: false },
+        ];
 
     const newExercise: WorkoutExercise = {
       id: `we-${Date.now()}`,
       exerciseId,
       sets: initialSets,
       ...(isBw ? { includeBodyweight: true, bodyweightKg: defaultBw } : {}),
+      ...(shouldStartBilbo ? { isBilbo: true } : {}),
     };
 
     setActiveWorkout({
@@ -2120,6 +2265,115 @@ export default function App() {
     setActiveWorkout({ ...activeWorkout, exercises: updatedExercises });
   };
 
+  // Activar/Desactivar Modo Bilbo (1 única serie principal explosiva) en un ejercicio activo
+  const handleToggleBilboMode = (exIndex: number) => {
+    if (!activeWorkout) return;
+    const updatedExercises = [...activeWorkout.exercises];
+    const target = { ...updatedExercises[exIndex] };
+    const nextIsBilbo = !(target.isBilbo || target.sets.some((s) => s.type === 'B'));
+
+    if (nextIsBilbo) {
+      const bilboInfo = getBilboFeedback(target.exerciseId, history, settings.unit);
+      const prevNormal = getPreviousExerciseSets(target.exerciseId);
+      const warmups = target.sets.filter((s) => s.type === 'W');
+      const existingWork = target.sets.find((s) => s.type !== 'W') || target.sets[0];
+      const suggestedWeight =
+        bilboInfo.hasBilboHistory && !bilboInfo.cycleEnded
+          ? bilboInfo.suggestedWeight
+          : bilboInfo.hasBilboHistory
+          ? bilboInfo.previousWeight
+          : existingWork && existingWork.weight > 0
+          ? existingWork.weight
+          : prevNormal[0]?.weight ?? 0;
+
+      const mainBilboSet: WorkoutSet = {
+        id: existingWork?.id || `set-${Date.now()}-bilbo`,
+        type: 'B',
+        weight: existingWork?.completed ? existingWork.weight : suggestedWeight,
+        reps: existingWork?.reps ?? 0,
+        rir: existingWork?.rir,
+        completed: existingWork?.completed ?? false,
+        completedAt: existingWork?.completedAt,
+        bodyweightKg: existingWork?.bodyweightKg,
+      };
+      target.isBilbo = true;
+      target.sets = [...warmups, mainBilboSet];
+    } else {
+      target.isBilbo = false;
+      target.sets = target.sets.map((s) => (s.type === 'B' ? { ...s, type: 'N' as SetType } : s));
+    }
+
+    updatedExercises[exIndex] = target;
+    setActiveWorkout({ ...activeWorkout, exercises: updatedExercises });
+  };
+
+  // Vincular ejercicios seleccionados en una Superserie en el entreno activo
+  const handleToggleWorkoutSupersetSelect = (workoutExId: string) => {
+    setSelectedWorkoutExIdsForSuperset((prev) =>
+      prev.includes(workoutExId) ? prev.filter((id) => id !== workoutExId) : [...prev, workoutExId]
+    );
+  };
+
+  const syncWorkoutSupersetsToRoutine = (exercisesList: WorkoutExercise[]) => {
+    if (!activeWorkout?.routineId) return;
+    const supersetGroups: Record<string, string> = {};
+    exercisesList.forEach((we) => {
+      if (we.supersetGroupId) supersetGroups[we.exerciseId] = we.supersetGroupId;
+    });
+    setRoutines((prev) =>
+      prev.map((r) =>
+        r.id === activeWorkout.routineId
+          ? {
+              ...r,
+              exerciseIds: exercisesList.map((we) => we.exerciseId),
+              supersetGroups: Object.keys(supersetGroups).length > 0 ? supersetGroups : undefined,
+            }
+          : r
+      )
+    );
+  };
+
+  const handleConfirmWorkoutSuperset = () => {
+    if (!activeWorkout || selectedWorkoutExIdsForSuperset.length < 2) return;
+    const usedGroups = activeWorkout.exercises
+      .map((e) => e.supersetGroupId)
+      .filter((g): g is string => Boolean(g));
+    const newGroup = getNextSupersetLetter(usedGroups);
+    const selectedSet = new Set(selectedWorkoutExIdsForSuperset);
+
+    // Mantener el orden relativo y colocar las piezas de la superserie juntas en la posición del primero
+    const firstIndex = activeWorkout.exercises.findIndex((e) => selectedSet.has(e.id));
+    const groupedItems = activeWorkout.exercises
+      .filter((e) => selectedSet.has(e.id))
+      .map((e) => ({ ...e, supersetGroupId: newGroup }));
+
+    const reordered: WorkoutExercise[] = [];
+    let inserted = false;
+    activeWorkout.exercises.forEach((e, idx) => {
+      if (idx === firstIndex && !inserted) {
+        reordered.push(...groupedItems);
+        inserted = true;
+      }
+      if (!selectedSet.has(e.id)) {
+        reordered.push(e);
+      }
+    });
+
+    setActiveWorkout({ ...activeWorkout, exercises: reordered });
+    syncWorkoutSupersetsToRoutine(reordered);
+    setSelectedWorkoutExIdsForSuperset([]);
+    setIsLinkingWorkoutSuperset(false);
+  };
+
+  const handleUnlinkWorkoutSuperset = (groupId: string) => {
+    if (!activeWorkout) return;
+    const updated = activeWorkout.exercises.map((e) =>
+      e.supersetGroupId === groupId ? { ...e, supersetGroupId: undefined } : e
+    );
+    setActiveWorkout({ ...activeWorkout, exercises: updated });
+    syncWorkoutSupersetsToRoutine(updated);
+  };
+
   // Modificar serie en entreno activo
   const handleUpdateSet = (
     exIndex: number,
@@ -2131,10 +2385,26 @@ export default function App() {
     const updatedExercises = [...activeWorkout.exercises];
     const targetExercise = { ...updatedExercises[exIndex] };
     const updatedSets = [...targetExercise.sets];
+    const wasCompleted = updatedSets[setIndex].completed;
     const targetSet = { ...updatedSets[setIndex], [field]: value };
 
-    // Si se marca como completada y antes no lo estaba -> guardar snapshot de peso corporal (calistenia) y disparar descanso
-    if (field === 'completed' && value === true && !updatedSets[setIndex].completed) {
+    // Si cambia el tipo de serie a 'B' (Bilbo), activar Modo Bilbo y sugerir +2.5 kg si aplica
+    if (field === 'type') {
+      if (value === 'B') {
+        targetExercise.isBilbo = true;
+        if (!targetSet.completed && targetSet.weight === 0) {
+          const bilboInfo = getBilboFeedback(targetExercise.exerciseId, history, settings.unit);
+          if (bilboInfo.hasBilboHistory) {
+            targetSet.weight = !bilboInfo.cycleEnded ? bilboInfo.suggestedWeight : bilboInfo.previousWeight;
+          }
+        }
+      } else if (updatedSets.every((s, idx) => (idx === setIndex ? value !== 'B' : s.type !== 'B'))) {
+        targetExercise.isBilbo = false;
+      }
+    }
+
+    // Si se marca como completada y antes no lo estaba -> calistenia snapshot, control Bilbo y lógica de descanso / superseries
+    if (field === 'completed' && value === true && !wasCompleted) {
       targetSet.completedAt = Date.now();
       const exInfo = exercises.find((e) => e.id === targetExercise.exerciseId);
       if (exInfo?.equipment === 'corporal') {
@@ -2143,9 +2413,54 @@ export default function App() {
             ? 0
             : (targetExercise.bodyweightKg ?? settings.userBodyweight ?? 75);
       }
-      if (settings.autoStartRestTimer !== false) {
+
+      // Control de Fin de Ciclo Bilbo (reps <= 15)
+      if (settings.enableBilboMethod && targetSet.type === 'B' && targetSet.reps > 0 && targetSet.reps <= 15) {
+        const exName = exInfo ? getExerciseName(exInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
+        setBilboCycleAlert({ exerciseName: exName, reps: targetSet.reps, weight: targetSet.weight });
+      }
+
+      // Lógica del Temporizador de Descanso en Superseries vs Serie Normal
+      const supersetGroup = settings.enableSupersets ? targetExercise.supersetGroupId : undefined;
+      const groupExercises = supersetGroup
+        ? updatedExercises.filter((e) => e.supersetGroupId === supersetGroup)
+        : [];
+      const posInGroup = supersetGroup
+        ? groupExercises.findIndex((e) => e.id === targetExercise.id)
+        : -1;
+
+      if (supersetGroup && groupExercises.length > 1 && posInGroup !== -1 && posInGroup < groupExercises.length - 1) {
+        // Es A1 (o no es el último de la superserie): NO activar descanso y enfocar inmediatamente A2
+        const nextEx = groupExercises[posInGroup + 1];
+        setExpandedExerciseIds((prev) => ({
+          ...prev,
+          [nextEx.id]: true,
+        }));
+        setFocusedSupersetExId(nextEx.id);
+        window.setTimeout(() => {
+          const el = document.querySelector(`[data-workout-ex-id="${nextEx.id}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const input = el.querySelector<HTMLInputElement>('input[type="number"]');
+            if (input) input.focus();
+          }
+        }, 90);
+        window.setTimeout(() => setFocusedSupersetExId(null), 1600);
+      } else if (settings.autoStartRestTimer !== false) {
+        // Último ejercicio de la superserie o ejercicio independiente -> iniciar descanso
         startRestTimer(settings.defaultRestTime);
       }
+    } else if (
+      field === 'reps' &&
+      settings.enableBilboMethod &&
+      targetSet.type === 'B' &&
+      targetSet.completed &&
+      Number(value) > 0 &&
+      Number(value) <= 15
+    ) {
+      const exInfo = exercises.find((e) => e.id === targetExercise.exerciseId);
+      const exName = exInfo ? getExerciseName(exInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
+      setBilboCycleAlert({ exerciseName: exName, reps: Number(value), weight: targetSet.weight });
     }
 
     updatedSets[setIndex] = targetSet;
@@ -2498,6 +2813,9 @@ export default function App() {
   const [newRotMuscleFilter, setNewRotMuscleFilter] = useState<string>('todos');
   const [newRotSearchQuery, setNewRotSearchQuery] = useState<string>('');
   const [selectedExIdsForRoutine, setSelectedExIdsForRoutine] = useState<string[]>([]);
+  const [newRotSupersetGroups, setNewRotSupersetGroups] = useState<Record<string, string>>({});
+  const [isLinkingRoutineSuperset, setIsLinkingRoutineSuperset] = useState<boolean>(false);
+  const [selectedRoutineExIdsForSuperset, setSelectedRoutineExIdsForSuperset] = useState<string[]>([]);
 
   const openCreateRoutineModal = () => {
     setEditingRoutine(null);
@@ -2508,6 +2826,9 @@ export default function App() {
     setNewRotMuscleFilter('todos');
     setNewRotSearchQuery('');
     setSelectedExIdsForRoutine([]);
+    setNewRotSupersetGroups({});
+    setIsLinkingRoutineSuperset(false);
+    setSelectedRoutineExIdsForSuperset([]);
     setIsRoutineEditorOpen(true);
     setActiveTab('rutinas');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2522,6 +2843,9 @@ export default function App() {
     setNewRotMuscleFilter('todos');
     setNewRotSearchQuery('');
     setSelectedExIdsForRoutine([...routine.exerciseIds]);
+    setNewRotSupersetGroups(routine.supersetGroups ? { ...routine.supersetGroups } : {});
+    setIsLinkingRoutineSuperset(false);
+    setSelectedRoutineExIdsForSuperset([]);
     setIsRoutineEditorOpen(true);
     setActiveTab('rutinas');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2530,6 +2854,85 @@ export default function App() {
   const closeRoutineEditor = () => {
     setIsRoutineEditorOpen(false);
     setEditingRoutine(null);
+    setIsLinkingRoutineSuperset(false);
+    setSelectedRoutineExIdsForSuperset([]);
+  };
+
+  const handleToggleRoutineSupersetSelect = (exId: string) => {
+    setSelectedRoutineExIdsForSuperset((prev) =>
+      prev.includes(exId) ? prev.filter((id) => id !== exId) : [...prev, exId]
+    );
+  };
+
+  const handleConfirmRoutineSuperset = () => {
+    if (selectedRoutineExIdsForSuperset.length < 2) return;
+    const used = Object.values(newRotSupersetGroups);
+    const groupLetter = getNextSupersetLetter(used);
+    const selectedSet = new Set(selectedRoutineExIdsForSuperset);
+
+    // Reordenar selectedExIdsForRoutine para colocar los ejercicios vinculados contiguos
+    const firstIdx = selectedExIdsForRoutine.findIndex((id) => selectedSet.has(id));
+    const groupedIds = selectedExIdsForRoutine.filter((id) => selectedSet.has(id));
+    const reordered: string[] = [];
+    let inserted = false;
+    selectedExIdsForRoutine.forEach((id, idx) => {
+      if (idx === firstIdx && !inserted) {
+        reordered.push(...groupedIds);
+        inserted = true;
+      }
+      if (!selectedSet.has(id)) {
+        reordered.push(id);
+      }
+    });
+
+    const nextGroups = { ...newRotSupersetGroups };
+    groupedIds.forEach((id) => {
+      nextGroups[id] = groupLetter;
+    });
+
+    setSelectedExIdsForRoutine(reordered);
+    setNewRotSupersetGroups(nextGroups);
+    setSelectedRoutineExIdsForSuperset([]);
+    setIsLinkingRoutineSuperset(false);
+  };
+
+  const handleUnlinkRoutineSuperset = (groupLetter: string) => {
+    setNewRotSupersetGroups((prev) => {
+      const next: Record<string, string> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        if (v !== groupLetter) next[k] = v;
+      });
+      return next;
+    });
+  };
+
+  const handleRemoveExFromRoutineEditor = (exId: string) => {
+    const nextIds = selectedExIdsForRoutine.filter((id) => id !== exId);
+    setSelectedExIdsForRoutine(nextIds);
+    setSelectedRoutineExIdsForSuperset((prev) => prev.filter((id) => id !== exId));
+    setNewRotSupersetGroups((prev) => {
+      const next = { ...prev };
+      const removedGroup = next[exId];
+      delete next[exId];
+      if (removedGroup) {
+        const remainingInGroup = Object.values(next).filter((g) => g === removedGroup).length;
+        if (remainingInGroup < 2) {
+          Object.keys(next).forEach((k) => {
+            if (next[k] === removedGroup) delete next[k];
+          });
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleMoveRoutineExercise = (idx: number, direction: -1 | 1) => {
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= selectedExIdsForRoutine.length) return;
+    const next = [...selectedExIdsForRoutine];
+    const [item] = next.splice(idx, 1);
+    next.splice(targetIdx, 0, item);
+    setSelectedExIdsForRoutine(next);
   };
 
   const handleSaveRoutine = (e: React.FormEvent) => {
@@ -2538,14 +2941,27 @@ export default function App() {
       return;
     }
 
+    // Limpiar superseries huérfanas (<2 ejercicios)
+    const groupCounts: Record<string, number> = {};
+    selectedExIdsForRoutine.forEach((id) => {
+      const g = newRotSupersetGroups[id];
+      if (g) groupCounts[g] = (groupCounts[g] || 0) + 1;
+    });
+    const cleanSupersetGroups: Record<string, string> = {};
+    selectedExIdsForRoutine.forEach((id) => {
+      const g = newRotSupersetGroups[id];
+      if (g && (groupCounts[g] || 0) >= 2) cleanSupersetGroups[id] = g;
+    });
+
     if (editingRoutine) {
-      // Modificar rutina existente (añadir/quitar ejercicios, día, etc.)
+      // Modificar rutina existente (añadir/quitar ejercicios, superseries, día, etc.)
       const updatedRoutine: Routine = {
         ...editingRoutine,
         title: newRotTitle.trim(),
         category: newRotCategory.trim() || 'Personalizada',
         description: newRotDesc.trim() || 'Rutina personalizada',
         exerciseIds: selectedExIdsForRoutine,
+        supersetGroups: Object.keys(cleanSupersetGroups).length > 0 ? cleanSupersetGroups : undefined,
         dayOfWeek: newRotDayOfWeek,
       };
 
@@ -2565,6 +2981,7 @@ export default function App() {
         category: newRotCategory.trim() || 'Personalizada',
         description: newRotDesc.trim() || 'Rutina creada a medida',
         exerciseIds: selectedExIdsForRoutine,
+        supersetGroups: Object.keys(cleanSupersetGroups).length > 0 ? cleanSupersetGroups : undefined,
         dayOfWeek: newRotDayOfWeek,
         isCustom: true,
       };
@@ -2579,6 +2996,9 @@ export default function App() {
     setNewRotMuscleFilter('todos');
     setNewRotSearchQuery('');
     setSelectedExIdsForRoutine([]);
+    setNewRotSupersetGroups({});
+    setIsLinkingRoutineSuperset(false);
+    setSelectedRoutineExIdsForSuperset([]);
     setEditingRoutine(null);
     setIsRoutineEditorOpen(false);
   };
@@ -2592,20 +3012,31 @@ export default function App() {
     setRoutineToDelete(null);
   };
 
-  // Ejercicios del entreno activo ordenados: los ejercicios pendientes arriba y los finalizados abajo
+  // Ejercicios del entreno activo ordenados: pendientes arriba y finalizados abajo (manteniendo superseries unidas si algún integrante sigue pendiente)
   const sortedWorkoutExercises = useMemo(() => {
     if (!activeWorkout) return [];
+    const pendingGroups = new Set<string>();
+    if (settings.enableSupersets) {
+      activeWorkout.exercises.forEach((ex) => {
+        if (ex.supersetGroupId && !ex.isCompleted) {
+          pendingGroups.add(ex.supersetGroupId);
+        }
+      });
+    }
     const pending: WorkoutExercise[] = [];
     const completed: WorkoutExercise[] = [];
     for (const ex of activeWorkout.exercises) {
-      if (ex.isCompleted) {
-        completed.push(ex);
-      } else {
+      const keepInPending =
+        !ex.isCompleted ||
+        Boolean(settings.enableSupersets && ex.supersetGroupId && pendingGroups.has(ex.supersetGroupId));
+      if (keepInPending) {
         pending.push(ex);
+      } else {
+        completed.push(ex);
       }
     }
     return [...pending, ...completed];
-  }, [activeWorkout?.exercises]);
+  }, [activeWorkout?.exercises, settings.enableSupersets]);
 
   // Rutinas ordenadas por día de la semana (Lunes a Domingo, y luego sin día) y alfabéticamente
   const sortedRoutines = useMemo(() => {
@@ -3098,23 +3529,74 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3. Ejercicios Seleccionados Actualmente */}
+                {/* 3. Ejercicios Seleccionados Actualmente (con soporte opcional de Superseries) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                       <Dumbbell className="w-4 h-4 text-emerald-400" />
                       3. {lang === 'en' ? 'Included Exercises' : 'Ejercicios Incluidos'} ({selectedExIdsForRoutine.length})
                     </h3>
-                    {selectedExIdsForRoutine.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedExIdsForRoutine([])}
-                        className="text-[11px] text-rose-400 hover:text-rose-300 font-bold transition hover:underline"
-                      >
-                        {lang === 'en' ? 'Remove all' : 'Quitar todos'}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {settings.enableSupersets && selectedExIdsForRoutine.length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsLinkingRoutineSuperset((prev) => !prev);
+                            setSelectedRoutineExIdsForSuperset([]);
+                          }}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition active:scale-95 flex items-center gap-1 ${
+                            isLinkingRoutineSuperset
+                              ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-black'
+                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
+                          }`}
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                          <span>{t.supersetGroupBtn.replace('🔗 ', '')}</span>
+                        </button>
+                      )}
+                      {selectedExIdsForRoutine.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedExIdsForRoutine([]);
+                            setNewRotSupersetGroups({});
+                            setIsLinkingRoutineSuperset(false);
+                            setSelectedRoutineExIdsForSuperset([]);
+                          }}
+                          className="text-[11px] text-rose-400 hover:text-rose-300 font-bold transition hover:underline"
+                        >
+                          {lang === 'en' ? 'Remove all' : 'Quitar todos'}
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Barra de confirmación al vincular superserie en editor */}
+                  {settings.enableSupersets && isLinkingRoutineSuperset && (
+                    <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="text-cyan-300 font-semibold">{t.supersetSelectHint}</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsLinkingRoutineSuperset(false);
+                            setSelectedRoutineExIdsForSuperset([]);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 font-bold text-[11px]"
+                        >
+                          {t.cancel}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={selectedRoutineExIdsForSuperset.length < 2}
+                          onClick={handleConfirmRoutineSuperset}
+                          className="px-3 py-1 rounded-lg bg-cyan-500 disabled:opacity-40 text-slate-950 font-black text-[11px] active:scale-95 transition"
+                        >
+                          {t.supersetConfirmBtn(getNextSupersetLetter(Object.values(newRotSupersetGroups)))} ({selectedRoutineExIdsForSuperset.length})
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {selectedExIdsForRoutine.length === 0 ? (
                     <div className="p-4 rounded-xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-500">
@@ -3123,43 +3605,163 @@ export default function App() {
                         : 'No has seleccionado ejercicios todavía. Elige al menos uno del catálogo inferior.'}
                     </div>
                   ) : (
-                    <div className="space-y-1.5">
-                      {selectedExIdsForRoutine.map((exId, idx) => {
-                        const ex = exercises.find((e) => e.id === exId);
-                        if (!ex) return null;
-                        const badge = getEquipmentBadge(ex.equipment, lang);
+                    <div className="space-y-2">
+                      {(() => {
+                        const blocks: Array<
+                          | { type: 'superset'; group: string; items: Array<{ exId: string; idx: number }> }
+                          | { type: 'single'; exId: string; idx: number }
+                        > = [];
 
-                        return (
-                          <div
-                            key={exId}
-                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center shrink-0">
-                                {idx + 1}
-                              </span>
-                              <div className="min-w-0">
-                                <span className="text-xs font-bold text-white block truncate">{getExerciseName(ex, lang)}</span>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
-                                    {badge.label}
+                        let i = 0;
+                        while (i < selectedExIdsForRoutine.length) {
+                          const exId = selectedExIdsForRoutine[i];
+                          const group = settings.enableSupersets ? newRotSupersetGroups[exId] : undefined;
+                          if (group) {
+                            const items: Array<{ exId: string; idx: number }> = [{ exId, idx: i }];
+                            let j = i + 1;
+                            while (
+                              j < selectedExIdsForRoutine.length &&
+                              newRotSupersetGroups[selectedExIdsForRoutine[j]] === group
+                            ) {
+                              items.push({ exId: selectedExIdsForRoutine[j], idx: j });
+                              j++;
+                            }
+                            if (items.length >= 2) {
+                              blocks.push({ type: 'superset', group, items });
+                              i = j;
+                              continue;
+                            }
+                          }
+                          blocks.push({ type: 'single', exId, idx: i });
+                          i++;
+                        }
+
+                        const renderRoutineExRow = (exId: string, idx: number, ssCode?: string, ssBadgeClass?: string) => {
+                          const ex = exercises.find((e) => e.id === exId);
+                          if (!ex) return null;
+                          const badge = getEquipmentBadge(ex.equipment, lang);
+                          const isCheckedForSs = selectedRoutineExIdsForSuperset.includes(exId);
+
+                          return (
+                            <div
+                              key={`${exId}-${idx}`}
+                              onClick={() => {
+                                if (isLinkingRoutineSuperset) handleToggleRoutineSupersetSelect(exId);
+                              }}
+                              className={`flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border transition ${
+                                isLinkingRoutineSuperset ? 'cursor-pointer' : ''
+                              } ${
+                                isCheckedForSs
+                                  ? 'border-cyan-400 ring-1 ring-cyan-400/50 bg-cyan-950/20'
+                                  : 'border-slate-800 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                {isLinkingRoutineSuperset ? (
+                                  <span
+                                    className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                                      isCheckedForSs
+                                        ? 'bg-cyan-500 border-cyan-400 text-slate-950'
+                                        : 'border-slate-600 bg-slate-900'
+                                    }`}
+                                  >
+                                    {isCheckedForSs && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                                   </span>
-                                  <span className="text-[10px] text-slate-400 capitalize">{getMuscleBadge(ex.muscle, lang)}</span>
+                                ) : (
+                                  <span
+                                    className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center shrink-0 border ${
+                                      ssCode && ssBadgeClass
+                                        ? ssBadgeClass
+                                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                    }`}
+                                  >
+                                    {ssCode || idx + 1}
+                                  </span>
+                                )}
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-white block truncate">{getExerciseName(ex, lang)}</span>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                                      {badge.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 capitalize">{getMuscleBadge(ex.muscle, lang)}</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
-                            <button
-                              type="button"
-                              onClick={() => setSelectedExIdsForRoutine((prev) => prev.filter((id) => id !== exId))}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-90 transition shrink-0"
-                              title={lang === 'en' ? 'Remove from routine' : 'Quitar de la rutina'}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
+                              {!isLinkingRoutineSuperset && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoveRoutineExercise(idx, -1)}
+                                    className="p-1 rounded-lg text-slate-500 hover:text-white disabled:opacity-25 transition"
+                                    title={lang === 'en' ? 'Move up' : 'Subir'}
+                                  >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === selectedExIdsForRoutine.length - 1}
+                                    onClick={() => handleMoveRoutineExercise(idx, 1)}
+                                    className="p-1 rounded-lg text-slate-500 hover:text-white disabled:opacity-25 transition"
+                                    title={lang === 'en' ? 'Move down' : 'Bajar'}
+                                  >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveExFromRoutineEditor(exId)}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-90 transition"
+                                    title={lang === 'en' ? 'Remove from routine' : 'Quitar de la rutina'}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        };
+
+                        return blocks.map((block, bIdx) => {
+                          if (block.type === 'superset') {
+                            const style = getSupersetStyle(block.group);
+                            const summaryTitle = block.items
+                              .map((it, sIdx) => {
+                                const ex = exercises.find((e) => e.id === it.exId);
+                                return `${block.group}${sIdx + 1} ${ex ? getExerciseName(ex, lang) : ''}`;
+                              })
+                              .join(' + ');
+
+                            return (
+                              <div key={`ss-block-${block.group}-${bIdx}`} className={`rounded-2xl border-2 overflow-hidden ${style.container}`}>
+                                <div className={`px-3 py-2 flex items-center justify-between gap-2 ${style.headerBg}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Link2 className={`w-3.5 h-3.5 shrink-0 ${style.text}`} />
+                                    <span className={`text-[11px] font-black truncate ${style.text}`}>
+                                      {t.supersetLabel(block.group)}: {summaryTitle}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnlinkRoutineSuperset(block.group)}
+                                    className="text-[10px] font-bold text-slate-300 hover:text-rose-400 flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60"
+                                  >
+                                    <Unlink className="w-3 h-3" />
+                                    <span>{t.supersetUnlinkBtn}</span>
+                                  </button>
+                                </div>
+                                <div className="p-2 space-y-1.5">
+                                  {block.items.map((it, sIdx) =>
+                                    renderRoutineExRow(it.exId, it.idx, `${block.group}${sIdx + 1}`, style.badge)
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return renderRoutineExRow(block.exId, block.idx);
+                        });
+                      })()}
                     </div>
                   )}
                 </div>
@@ -3536,516 +4138,807 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Barra de control de ejercicios: Contador y Expandir/Colapsar todos */}
-                <div className="flex items-center justify-between px-1 text-xs">
+                {/* Notificación Visual de Fin de Ciclo Bilbo (Reps <= 15) */}
+                {settings.enableBilboMethod && bilboCycleAlert && (
+                  <div className="p-3.5 rounded-2xl bg-amber-950/40 border-2 border-amber-400/70 text-amber-200 shadow-lg flex items-start justify-between gap-3 animate-in fade-in">
+                    <div className="space-y-1 min-w-0">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 block">
+                        {bilboCycleAlert.exerciseName} · {bilboCycleAlert.weight} {settings.unit} × {bilboCycleAlert.reps} {t.reps}
+                      </span>
+                      <p className="text-xs sm:text-sm font-extrabold leading-snug text-white">
+                        {t.bilboCycleFinishedAlert}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBilboCycleAlert(null)}
+                      className="p-1 rounded-lg text-amber-300 hover:bg-amber-500/20 shrink-0"
+                      title={t.close}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Barra de control de ejercicios: Contador, Superserie y Expandir/Colapsar todos */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
                   <span className="font-bold text-slate-400">
                     {activeWorkout.exercises.length} {activeWorkout.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
                   </span>
                   <div className="flex items-center gap-2">
+                    {settings.enableSupersets && activeWorkout.exercises.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLinkingWorkoutSuperset((prev) => !prev);
+                          setSelectedWorkoutExIdsForSuperset([]);
+                        }}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition active:scale-95 flex items-center gap-1 ${
+                          isLinkingWorkoutSuperset
+                            ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-black'
+                            : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
+                        }`}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span>{t.supersetGroupBtn.replace('🔗 ', '')}</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleToggleExpandAll(true)}
                       className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
                     >
-                      Expandir todos
+                      {lang === 'en' ? 'Expand all' : 'Expandir todos'}
                     </button>
                     <span className="text-slate-600">•</span>
                     <button
                       onClick={() => handleToggleExpandAll(false)}
                       className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
                     >
-                      Colapsar todos
+                      {lang === 'en' ? 'Collapse all' : 'Colapsar todos'}
                     </button>
                   </div>
                 </div>
 
-                {/* Lista de Ejercicios del Entreno Activo (Acordeón Colapsable con Ejercicios Acabados al Final) */}
-                <div className="space-y-3">
-                  {sortedWorkoutExercises.map((workoutEx, displayIdx) => {
-                    const exIdx = activeWorkout.exercises.findIndex((e) => e.id === workoutEx.id);
-                    const exerciseInfo = exercises.find((e) => e.id === workoutEx.exerciseId);
-                    const previousSets = getPreviousExerciseSets(workoutEx.exerciseId);
-                    const isExpanded = !!expandedExerciseIds[workoutEx.id];
-                    const completedSetsCount = workoutEx.sets.filter((s) => s.completed).length;
-                    const totalSetsCount = workoutEx.sets.length;
-                    const isAllCompleted = totalSetsCount > 0 && completedSetsCount === totalSetsCount;
-                    const lastCompletedSet = [...workoutEx.sets].reverse().find((s) => s.completed);
-                    const isBodyweightEx = exerciseInfo?.equipment === 'corporal';
-                    const includeBw = workoutEx.includeBodyweight !== false;
-                    const exBodyweight = workoutEx.bodyweightKg ?? settings.userBodyweight ?? 75;
-                    const feedback = getProgressiveOverloadFeedback(
-                      workoutEx.exerciseId,
-                      history,
-                      settings.unit,
-                      lang,
-                      exercises,
-                      settings.userBodyweight ?? 75
-                    );
-
-                    return (
-                      <div
-                        key={workoutEx.id}
-                        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-300 shadow-md ${
-                          workoutEx.isCompleted
-                            ? 'border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 bg-slate-900/95 ring-1 ring-emerald-500/30'
-                            : isAllCompleted
-                            ? 'border-emerald-500/40 bg-slate-900/90'
-                            : isExpanded
-                            ? 'border-slate-700 bg-slate-900 ring-1 ring-emerald-500/20'
-                            : 'border-slate-800/90 hover:border-slate-700'
-                        }`}
+                {/* Barra de selección para vincular ejercicios en Superserie en la sesión activa */}
+                {settings.enableSupersets && isLinkingWorkoutSuperset && (
+                  <div className="p-3 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 flex flex-wrap items-center justify-between gap-2 text-xs animate-in fade-in">
+                    <span className="text-cyan-300 font-semibold">{t.supersetSelectHint}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLinkingWorkoutSuperset(false);
+                          setSelectedWorkoutExIdsForSuperset([]);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
                       >
-                        {/* Cabecera Táctil del Ejercicio (Click para Expandir / Colapsar) */}
+                        {t.cancel}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedWorkoutExIdsForSuperset.length < 2}
+                        onClick={handleConfirmWorkoutSuperset}
+                        className="px-3.5 py-1.5 rounded-xl bg-cyan-500 disabled:opacity-40 text-slate-950 font-black text-xs active:scale-95 transition"
+                      >
+                        {t.supersetConfirmBtn(
+                          getNextSupersetLetter(
+                            activeWorkout.exercises
+                              .map((e) => e.supersetGroupId)
+                              .filter((g): g is string => Boolean(g))
+                          )
+                        )}{' '}
+                        ({selectedWorkoutExIdsForSuperset.length})
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Ejercicios del Entreno Activo (con contenedores unificados de Superserie opcionales) */}
+                <div className="space-y-3">
+                  {(() => {
+                    const renderWorkoutExerciseCard = (
+                      workoutEx: WorkoutExercise,
+                      displayIdx: number,
+                      supersetCode?: string,
+                      supersetBadgeClass?: string
+                    ) => {
+                      const exIdx = activeWorkout.exercises.findIndex((e) => e.id === workoutEx.id);
+                      const exerciseInfo = exercises.find((e) => e.id === workoutEx.exerciseId);
+                      const previousSets = getPreviousExerciseSets(workoutEx.exerciseId);
+                      const isExpanded = !!expandedExerciseIds[workoutEx.id];
+                      const completedSetsCount = workoutEx.sets.filter((s) => s.completed).length;
+                      const totalSetsCount = workoutEx.sets.length;
+                      const isAllCompleted = totalSetsCount > 0 && completedSetsCount === totalSetsCount;
+                      const lastCompletedSet = [...workoutEx.sets].reverse().find((s) => s.completed);
+                      const isBodyweightEx = exerciseInfo?.equipment === 'corporal';
+                      const includeBw = workoutEx.includeBodyweight !== false;
+                      const exBodyweight = workoutEx.bodyweightKg ?? settings.userBodyweight ?? 75;
+                      const isBilboActive = Boolean(
+                        settings.enableBilboMethod && (workoutEx.isBilbo || workoutEx.sets.some((s) => s.type === 'B'))
+                      );
+                      const bilboInfo = isBilboActive
+                        ? getBilboFeedback(workoutEx.exerciseId, history, settings.unit)
+                        : null;
+                      const completedBilboSet = isBilboActive
+                        ? workoutEx.sets.find((s) => s.type === 'B' && s.completed)
+                        : undefined;
+                      const isBilboCycleEndedNow = Boolean(
+                        completedBilboSet && completedBilboSet.reps > 0 && completedBilboSet.reps <= 15
+                      );
+                      const feedback = getProgressiveOverloadFeedback(
+                        workoutEx.exerciseId,
+                        history,
+                        settings.unit,
+                        lang,
+                        exercises,
+                        settings.userBodyweight ?? 75
+                      );
+                      const isSelectedForSuperset = selectedWorkoutExIdsForSuperset.includes(workoutEx.id);
+                      const isSupersetFocused = focusedSupersetExId === workoutEx.id;
+                      const availableSetTypes: SetType[] = settings.enableBilboMethod
+                        ? ['N', 'W', 'F', 'D', 'B']
+                        : ['N', 'W', 'F', 'D'];
+
+                      return (
                         <div
-                          onClick={() => toggleExerciseExpand(workoutEx.id)}
-                          className="p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none space-y-2"
+                          key={workoutEx.id}
+                          data-workout-ex-id={workoutEx.id}
+                          className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-300 shadow-md ${
+                            isSupersetFocused
+                              ? 'border-2 border-cyan-400 ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/20'
+                              : isSelectedForSuperset
+                              ? 'border-2 border-cyan-400 bg-cyan-950/20 ring-1 ring-cyan-400/40'
+                              : workoutEx.isCompleted
+                              ? 'border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 bg-slate-900/95 ring-1 ring-emerald-500/30'
+                              : isAllCompleted
+                              ? 'border-emerald-500/40 bg-slate-900/90'
+                              : isExpanded
+                              ? 'border-slate-700 bg-slate-900 ring-1 ring-emerald-500/20'
+                              : 'border-slate-800/90 hover:border-slate-700'
+                          }`}
                         >
-                          {/* LÍNEA 1: Reservada para número de ejercicio y nombre (truncate sin saltar de línea) */}
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span
-                              className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
-                                workoutEx.isCompleted
-                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
-                                  : isAllCompleted
-                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                              }`}
-                            >
-                              {workoutEx.isCompleted || isAllCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : displayIdx + 1}
-                            </span>
-                            <h3 className="text-sm sm:text-base font-extrabold text-white truncate min-w-0 flex-1">
-                              {exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
-                            </h3>
-                            {workoutEx.isCompleted && (
-                              <span className="shrink-0 text-[10px] font-black text-emerald-400 bg-emerald-500/15 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                                <span className="hidden xs:inline">{t.exerciseFinishedBadge}</span>
-                              </span>
+                          {/* Cabecera Táctil del Ejercicio (Click para Expandir / Colapsar o Seleccionar Superserie) */}
+                          <div
+                            onClick={() => {
+                              if (isLinkingWorkoutSuperset) {
+                                handleToggleWorkoutSupersetSelect(workoutEx.id);
+                              } else {
+                                toggleExerciseExpand(workoutEx.id);
+                              }
+                            }}
+                            className="p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none space-y-2"
+                          >
+                            {/* LÍNEA 1: Reservada para número/código de ejercicio y nombre (truncate sin saltar de línea) */}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {isLinkingWorkoutSuperset ? (
+                                <span
+                                  className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
+                                    isSelectedForSuperset
+                                      ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                                  }`}
+                                >
+                                  {isSelectedForSuperset ? <Check className="w-4 h-4 stroke-[3]" /> : displayIdx + 1}
+                                </span>
+                              ) : (
+                                <span
+                                  className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
+                                    supersetCode && supersetBadgeClass
+                                      ? supersetBadgeClass
+                                      : workoutEx.isCompleted
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+                                      : isAllCompleted
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  }`}
+                                >
+                                  {supersetCode
+                                    ? supersetCode
+                                    : workoutEx.isCompleted || isAllCompleted
+                                    ? <Check className="w-4 h-4 stroke-[3]" />
+                                    : displayIdx + 1}
+                                </span>
+                              )}
+                              <h3 className="text-sm sm:text-base font-extrabold text-white truncate min-w-0 flex-1">
+                                {exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
+                              </h3>
+                              {isBilboActive && (
+                                <span className="shrink-0 text-[10px] font-black text-amber-300 bg-amber-500/15 border border-amber-400/50 px-2 py-0.5 rounded-full">
+                                  ⚡ Bilbo
+                                </span>
+                              )}
+                              {workoutEx.isCompleted && (
+                                <span className="shrink-0 text-[10px] font-black text-emerald-400 bg-emerald-500/15 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Check className="w-3 h-3 stroke-[3]" />
+                                  <span className="hidden xs:inline">{t.exerciseFinishedBadge}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y acciones a la derecha */}
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              {/* Material y Grupo Muscular */}
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                {exerciseInfo && (
+                                  <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                      getEquipmentBadge(exerciseInfo.equipment, lang).color
+                                    }`}
+                                  >
+                                    {getEquipmentBadge(exerciseInfo.equipment, lang).label}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-400 capitalize">
+                                  {exerciseInfo ? getMuscleBadge(exerciseInfo.muscle, lang) : ''}
+                                </span>
+                              </div>
+
+                              {/* Acciones y Estado */}
+                              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                                {/* Badge de Progreso de Series */}
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
+                                    workoutEx.isCompleted || isAllCompleted
+                                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
+                                      : completedSetsCount > 0
+                                      ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                                      : 'bg-slate-800 text-slate-400 border-slate-700/80'
+                                  }`}
+                                >
+                                  {workoutEx.isCompleted || isAllCompleted ? (
+                                    <>
+                                      <Check className="w-3 h-3 stroke-[3]" /> {lang === 'en' ? 'Done' : 'Completo'}
+                                    </>
+                                  ) : (
+                                    `${completedSetsCount}/${totalSetsCount} ${t.sets}`
+                                  )}
+                                </span>
+
+                                {/* Botón Directo Sustituir en 1 Toque (Exercise Swap) */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenSubstituteModal(exIdx);
+                                  }}
+                                  className="text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded-lg active:scale-90 transition bg-cyan-500/10 hover:bg-cyan-500/20 flex items-center gap-1 border border-cyan-500/30"
+                                  title={lang === 'en' ? 'Swap for compatible alternative' : 'Sustituir por alternativa compatible'}
+                                >
+                                  <RefreshCw className="w-3 h-3 text-cyan-400" />
+                                  <span className="text-[10px] font-bold">{t.swapExerciseBtn}</span>
+                                </button>
+
+                                {/* Botón Confirmar Fin de Ejercicio */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleExerciseFinished(workoutEx.id);
+                                  }}
+                                  className={`p-1.5 px-2 rounded-lg text-[10px] font-black flex items-center gap-1 active:scale-95 transition border ${
+                                    workoutEx.isCompleted
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
+                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                                  }`}
+                                  title={
+                                    workoutEx.isCompleted
+                                      ? (lang === 'en' ? 'Click to reopen exercise' : 'Clic para reabrir ejercicio')
+                                      : (lang === 'en' ? 'Confirm exercise finished' : 'Confirmar que el ejercicio se ha acabado')
+                                  }
+                                >
+                                  <CheckCircle2 className={`w-3.5 h-3.5 ${workoutEx.isCompleted ? 'fill-emerald-400/30' : ''}`} />
+                                  <span className="hidden sm:inline">
+                                    {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
+                                  </span>
+                                </button>
+
+                                {/* Botón Eliminar Ejercicio (abre modal de confirmación) */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const exName = exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
+                                    setExerciseToDeleteFromWorkout({ id: workoutEx.id, name: exName });
+                                  }}
+                                  className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
+                                  title={lang === 'en' ? 'Remove this exercise' : 'Eliminar este ejercicio'}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                {/* Flecha Chevron Giratoria */}
+                                <div className="p-0.5 text-slate-400">
+                                  <ChevronDown
+                                    className={`w-4 h-4 transition-transform duration-200 ${
+                                      isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* INSIGNIA DESTACADA DE SOBRECARGA / MODO BILBO (visible incluso colapsado) */}
+                            {isBilboActive && bilboInfo?.hasBilboHistory && !workoutEx.isCompleted ? (
+                              <div className="pt-0.5">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-lg border ${
+                                    bilboInfo.cycleEnded
+                                      ? 'bg-amber-500/15 text-amber-300 border-amber-400/60'
+                                      : 'bg-emerald-500/15 text-emerald-300 border-emerald-400/60 shadow-[0_0_12px_rgba(16,185,129,0.22)]'
+                                  }`}
+                                >
+                                  <span>
+                                    {bilboInfo.cycleEnded
+                                      ? t.bilboCycleFinishedAlert
+                                      : t.bilboSuggestionBanner(
+                                          bilboInfo.suggestedWeight,
+                                          settings.unit,
+                                          bilboInfo.previousWeight,
+                                          bilboInfo.previousReps
+                                        )}
+                                  </span>
+                                </span>
+                              </div>
+                            ) : (
+                              feedback.shouldIncrease &&
+                              !workoutEx.isCompleted && (
+                                <div className="pt-0.5">
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-400/60 shadow-[0_0_12px_rgba(16,185,129,0.22)]">
+                                    <span>{feedback.badgeText}</span>
+                                  </span>
+                                </div>
+                              )
                             )}
                           </div>
 
-                          {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y acciones a la derecha */}
-                          <div className="flex items-center justify-between gap-2 pt-0.5">
-                            {/* Material y Grupo Muscular */}
-                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                              {exerciseInfo && (
-                                <span
-                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                    getEquipmentBadge(exerciseInfo.equipment, lang).color
-                                  }`}
-                                >
-                                  {getEquipmentBadge(exerciseInfo.equipment, lang).label}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-400 capitalize">
-                                {exerciseInfo ? getMuscleBadge(exerciseInfo.muscle, lang) : ''}
+                          {/* Vista Resumida cuando está colapsado */}
+                          {!isExpanded && lastCompletedSet && (
+                            <div
+                              onClick={() => toggleExerciseExpand(workoutEx.id)}
+                              className="px-3.5 pb-2.5 pt-1 text-[11px] text-slate-400 flex items-center justify-between cursor-pointer border-t border-slate-800/40 bg-slate-950/30"
+                            >
+                              <span className="truncate">
+                                {lang === 'en' ? 'Last set:' : 'Última serie:'}{' '}
+                                <strong className="text-slate-200 font-mono-numbers">
+                                  {isBodyweightEx
+                                    ? `${includeBw ? `${exBodyweight}${lastCompletedSet.weight > 0 ? `+${lastCompletedSet.weight}` : ''}` : `+${lastCompletedSet.weight}`} ${settings.unit}`
+                                    : `${lastCompletedSet.weight} ${settings.unit}`}{' '}
+                                  × {lastCompletedSet.reps} {t.reps}
+                                  {lastCompletedSet.rir !== undefined ? ` · RIR ${lastCompletedSet.rir >= 3 ? '3+' : lastCompletedSet.rir}` : ''}
+                                </strong>
                               </span>
-                            </div>
-
-                            {/* Acciones y Estado */}
-                            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                              {/* Badge de Progreso de Series */}
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
-                                  workoutEx.isCompleted || isAllCompleted
-                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-black'
-                                    : completedSetsCount > 0
-                                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                                    : 'bg-slate-800 text-slate-400 border-slate-700/80'
-                                }`}
-                              >
-                                {workoutEx.isCompleted || isAllCompleted ? (
-                                  <>
-                                    <Check className="w-3 h-3 stroke-[3]" /> {lang === 'en' ? 'Done' : 'Completo'}
-                                  </>
-                                ) : (
-                                  `${completedSetsCount}/${totalSetsCount} ${t.sets}`
-                                )}
-                              </span>
-
-                              {/* Botón Directo Sustituir en 1 Toque (Exercise Swap) */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenSubstituteModal(exIdx);
-                                }}
-                                className="text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded-lg active:scale-90 transition bg-cyan-500/10 hover:bg-cyan-500/20 flex items-center gap-1 border border-cyan-500/30"
-                                title={lang === 'en' ? 'Swap for compatible alternative' : 'Sustituir por alternativa compatible'}
-                              >
-                                <RefreshCw className="w-3 h-3 text-cyan-400" />
-                                <span className="text-[10px] font-bold">{t.swapExerciseBtn}</span>
-                              </button>
-
-                              {/* Botón Confirmar Fin de Ejercicio */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleExerciseFinished(workoutEx.id);
-                                }}
-                                className={`p-1.5 px-2 rounded-lg text-[10px] font-black flex items-center gap-1 active:scale-95 transition border ${
-                                  workoutEx.isCompleted
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
-                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
-                                }`}
-                                title={
-                                  workoutEx.isCompleted
-                                    ? (lang === 'en' ? 'Click to reopen exercise' : 'Clic para reabrir ejercicio')
-                                    : (lang === 'en' ? 'Confirm exercise finished' : 'Confirmar que el ejercicio se ha acabado')
-                                }
-                              >
-                                <CheckCircle2 className={`w-3.5 h-3.5 ${workoutEx.isCompleted ? 'fill-emerald-400/30' : ''}`} />
-                                <span className="hidden sm:inline">
-                                  {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
-                                </span>
-                              </button>
-
-                              {/* Botón Eliminar Ejercicio (abre modal de confirmación) */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const exName = exerciseInfo ? getExerciseName(exerciseInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio');
-                                  setExerciseToDeleteFromWorkout({ id: workoutEx.id, name: exName });
-                                }}
-                                className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-rose-500/10"
-                                title={lang === 'en' ? 'Remove this exercise' : 'Eliminar este ejercicio'}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
-                              {/* Flecha Chevron Giratoria */}
-                              <div className="p-0.5 text-slate-400">
-                                <ChevronDown
-                                  className={`w-4 h-4 transition-transform duration-200 ${
-                                    isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
-                                  }`}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* INSIGNIA DESTACADA DE SOBRECARGA PROGRESIVA (visible incluso colapsado) */}
-                          {feedback.shouldIncrease && !workoutEx.isCompleted && (
-                            <div className="pt-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-400/60 shadow-[0_0_12px_rgba(16,185,129,0.22)]">
-                                <span>{feedback.badgeText}</span>
+                              <span className="text-[10px] text-emerald-400 font-semibold hover:underline shrink-0 ml-2">
+                                {lang === 'en' ? 'Tap to expand' : 'Toca para abrir'}
                               </span>
                             </div>
                           )}
-                        </div>
 
-                        {/* Vista Resumida cuando está colapsado */}
-                        {!isExpanded && lastCompletedSet && (
-                          <div
-                            onClick={() => toggleExerciseExpand(workoutEx.id)}
-                            className="px-3.5 pb-2.5 pt-1 text-[11px] text-slate-400 flex items-center justify-between cursor-pointer border-t border-slate-800/40 bg-slate-950/30"
-                          >
-                            <span className="truncate">
-                              {lang === 'en' ? 'Last set:' : 'Última serie:'}{' '}
-                              <strong className="text-slate-200 font-mono-numbers">
-                                {isBodyweightEx
-                                  ? `${includeBw ? `${exBodyweight}${lastCompletedSet.weight > 0 ? `+${lastCompletedSet.weight}` : ''}` : `+${lastCompletedSet.weight}`} ${settings.unit}`
-                                  : `${lastCompletedSet.weight} ${settings.unit}`}{' '}
-                                × {lastCompletedSet.reps} {t.reps}
-                                {lastCompletedSet.rir !== undefined ? ` · RIR ${lastCompletedSet.rir >= 3 ? '3+' : lastCompletedSet.rir}` : ''}
-                              </strong>
-                            </span>
-                            <span className="text-[10px] text-emerald-400 font-semibold hover:underline shrink-0 ml-2">
-                              {lang === 'en' ? 'Tap to expand' : 'Toca para abrir'}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Contenido Expandido: Guía Sobrecarga, Calistenia, Series + RIR */}
-                        {isExpanded && (
-                          <div className="p-3 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
-                            {/* Banner de Sobrecarga Progresiva */}
-                            <div
-                              className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
-                                feedback.shouldIncrease
-                                  ? 'bg-emerald-950/40 border-emerald-400/50 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.12)]'
-                                  : feedback.hasHistory
-                                  ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
-                                  : 'bg-slate-950/60 border-slate-800 text-slate-400'
-                              }`}
-                            >
-                              <div className="flex items-start gap-2 min-w-0">
-                                <Lightbulb
-                                  className={`w-4 h-4 shrink-0 mt-0.5 ${
-                                    feedback.shouldIncrease ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'
-                                  }`}
-                                />
-                                <div className="min-w-0">
-                                  <span className="font-extrabold block text-[10px] uppercase tracking-wider mb-0.5">
-                                    {feedback.shouldIncrease
-                                      ? (lang === 'en' ? '⚡ Progressive Overload Ready' : '⚡ Sobrecarga Progresiva Sugerida')
-                                      : (lang === 'en' ? '🎯 Session Guide' : '🎯 Guía de Sesión')}
-                                  </span>
-                                  <p className="text-[11px] leading-relaxed opacity-95">{feedback.message}</p>
+                          {/* Contenido Expandido: Guía Sobrecarga / Bilbo, Calistenia, Series + RIR */}
+                          {isExpanded && (
+                            <div className="p-3 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
+                              {/* Alerta de Fin de Ciclo Bilbo en tiempo real */}
+                              {isBilboCycleEndedNow && (
+                                <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-400/60 text-xs font-extrabold text-amber-200">
+                                  {t.bilboCycleFinishedAlert}
                                 </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenSubstituteModal(exIdx)}
-                                className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition"
-                                title={lang === 'en' ? 'Equipment busy: swap exercise' : 'Máquina ocupada: sustituir ejercicio'}
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                <span>{t.swapExerciseBtn}</span>
-                              </button>
-                            </div>
+                              )}
 
-                            {/* Barra de Configuración Calistenia (Peso Corporal + Lastre) */}
-                            {isBodyweightEx && (
-                              <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/25 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-black text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded-md text-[10px]">
-                                    {t.calisthenicsBadge}
-                                  </span>
+                              {/* Banner de Sobrecarga Progresiva / Guía + Botón Modo Bilbo (si está activado en Ajustes) */}
+                              <div
+                                className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2 transition-all ${
+                                  isBilboActive
+                                    ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                                    : feedback.shouldIncrease
+                                    ? 'bg-emerald-950/40 border-emerald-400/50 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.12)]'
+                                    : feedback.hasHistory
+                                    ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
+                                    : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2 min-w-0">
+                                  <Lightbulb
+                                    className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                      isBilboActive
+                                        ? 'text-amber-400'
+                                        : feedback.shouldIncrease
+                                        ? 'text-emerald-400 animate-pulse'
+                                        : 'text-cyan-400'
+                                    }`}
+                                  />
+                                  <div className="min-w-0">
+                                    <span className="font-extrabold block text-[10px] uppercase tracking-wider mb-0.5">
+                                      {isBilboActive
+                                        ? `⚡ ${t.bilboBadge}`
+                                        : feedback.shouldIncrease
+                                        ? (lang === 'en' ? '⚡ Progressive Overload Ready' : '⚡ Sobrecarga Progresiva Sugerida')
+                                        : (lang === 'en' ? '🎯 Session Guide' : '🎯 Guía de Sesión')}
+                                    </span>
+                                    <p className="text-[11px] leading-relaxed opacity-95">
+                                      {isBilboActive
+                                        ? bilboInfo?.hasBilboHistory
+                                          ? bilboInfo.cycleEnded
+                                            ? t.bilboCycleFinishedAlert
+                                            : t.bilboSuggestionBanner(
+                                                bilboInfo.suggestedWeight,
+                                                settings.unit,
+                                                bilboInfo.previousWeight,
+                                                bilboInfo.previousReps
+                                              )
+                                          : t.bilboSingleSetNote
+                                        : feedback.message}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0">
+                                  {settings.enableBilboMethod && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleBilboMode(exIdx)}
+                                      className={`text-[10px] font-black px-2.5 py-1 rounded-lg border flex items-center gap-1 active:scale-95 transition ${
+                                        isBilboActive
+                                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                                          : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/30'
+                                      }`}
+                                    >
+                                      <Zap className="w-3 h-3" />
+                                      <span>{t.bilboModeBtn}</span>
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      handleUpdateWorkoutExerciseBodyweight(exIdx, {
-                                        includeBodyweight: !includeBw,
-                                      })
-                                    }
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition active:scale-95 ${
-                                      includeBw
-                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                        : 'bg-slate-900 text-slate-400 border-slate-700'
-                                    }`}
+                                    onClick={() => handleOpenSubstituteModal(exIdx)}
+                                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition"
+                                    title={lang === 'en' ? 'Equipment busy: swap exercise' : 'Máquina ocupada: sustituir ejercicio'}
                                   >
-                                    {includeBw ? t.includeBodyweightLabel : t.addedLoadOnlyLabel}
+                                    <RefreshCw className="w-3 h-3" />
+                                    <span>{t.swapExerciseBtn}</span>
                                   </button>
                                 </div>
+                              </div>
 
-                                {includeBw && (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-slate-400 font-bold">{t.bodyweightInputLabel}:</span>
-                                    <input
-                                      type="number"
-                                      step="0.5"
-                                      min="0"
-                                      value={exBodyweight}
-                                      onChange={(e) =>
+                              {/* Barra de Configuración Calistenia (Peso Corporal + Lastre) */}
+                              {isBodyweightEx && (
+                                <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/25 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-black text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded-md text-[10px]">
+                                      {t.calisthenicsBadge}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
                                         handleUpdateWorkoutExerciseBodyweight(exIdx, {
-                                          bodyweightKg: Math.max(0, parseFloat(e.target.value) || 0),
+                                          includeBodyweight: !includeBw,
                                         })
                                       }
-                                      className="w-16 text-center bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg py-1 text-xs font-black font-mono-numbers text-white focus:outline-none"
-                                    />
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{settings.unit}</span>
+                                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition active:scale-95 ${
+                                        includeBw
+                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                          : 'bg-slate-900 text-slate-400 border-slate-700'
+                                      }`}
+                                    >
+                                      {includeBw ? t.includeBodyweightLabel : t.addedLoadOnlyLabel}
+                                    </button>
                                   </div>
-                                )}
-                              </div>
-                            )}
 
-                            {/* Cabecera de Columnas de Series (6 Columnas: SET, PREV, KG/+KG, REPS, RIR, OK) */}
-                            <div className="grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-0.5 text-center items-center">
-                              <span className="text-left">{t.setColHeader}</span>
-                              <span>{t.prevColHeader}</span>
-                              <span>{isBodyweightEx ? t.addedLoadColHeader(settings.unit) : settings.unit.toUpperCase()}</span>
-                              <span>{t.repsColHeader}</span>
-                              <span>{t.rirColHeader}</span>
-                              <span>{t.doneColHeader}</span>
-                            </div>
-
-                            {/* Filas de Series */}
-                            <div className="space-y-1.5">
-                              {workoutEx.sets.map((set, setIdx) => {
-                                const prevSet = previousSets[setIdx] || previousSets[previousSets.length - 1];
-                                const ghostText = prevSet
-                                  ? `${isBodyweightEx && prevSet.weight > 0 ? `+${prevSet.weight}` : prevSet.weight}×${prevSet.reps}`
-                                  : '—';
-                                const effectiveWeight = getEffectiveSetWeight(
-                                  set,
-                                  workoutEx,
-                                  exercises,
-                                  settings.userBodyweight ?? 75
-                                );
-                                const est1RM = calculate1RM(effectiveWeight, set.reps);
-
-                                return (
-                                  <div
-                                    key={set.id}
-                                    className={`grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 items-center p-1.5 rounded-xl transition-all ${
-                                      set.completed
-                                        ? 'bg-emerald-950/20 border border-emerald-500/30'
-                                        : 'bg-slate-950/70 border border-slate-800/60'
-                                    }`}
-                                  >
-                                    {/* Tipo / Número de Serie */}
-                                    <div className="flex flex-col items-center justify-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const types: SetType[] = ['N', 'W', 'F', 'D'];
-                                          const nextType = types[(types.indexOf(set.type) + 1) % types.length];
-                                          handleUpdateSet(exIdx, setIdx, 'type', nextType);
-                                        }}
-                                        className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition active:scale-90 ${
-                                          set.type === 'W'
-                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                                            : set.type === 'F'
-                                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                                            : set.type === 'D'
-                                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
-                                            : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                        }`}
-                                        title={`Tipo: ${
-                                          set.type === 'W'
-                                            ? 'Calentamiento'
-                                            : set.type === 'F'
-                                            ? 'Fallo Muscular'
-                                            : set.type === 'D'
-                                            ? 'Drop Set'
-                                            : 'Normal'
-                                        } (Click para cambiar)`}
-                                      >
-                                        {set.type === 'N' ? setIdx + 1 : set.type}
-                                      </button>
-                                      {set.completed && est1RM > 0 && (
-                                        <span
-                                          className="hidden sm:inline text-[8px] font-bold text-slate-500 mt-0.5"
-                                          title="1RM Estimada (Epley)"
-                                        >
-                                          {est1RM}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Ghost Data previo */}
-                                    <div className="text-center text-[11px] font-mono-numbers text-slate-500 truncate select-text">
-                                      {ghostText}
-                                    </div>
-
-                                    {/* Input Peso o Lastre (+kg) */}
-                                    <div className="flex items-center justify-center">
+                                  {includeBw && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] text-slate-400 font-bold">{t.bodyweightInputLabel}:</span>
                                       <input
                                         type="number"
                                         step="0.5"
                                         min="0"
-                                        value={set.weight === 0 ? '' : set.weight}
-                                        placeholder={isBodyweightEx ? '+0' : '0'}
+                                        value={exBodyweight}
                                         onChange={(e) =>
-                                          handleUpdateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)
+                                          handleUpdateWorkoutExerciseBodyweight(exIdx, {
+                                            bodyweightKg: Math.max(0, parseFloat(e.target.value) || 0),
+                                          })
                                         }
-                                        className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
+                                        className="w-16 text-center bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg py-1 text-xs font-black font-mono-numbers text-white focus:outline-none"
                                       />
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase">{settings.unit}</span>
                                     </div>
+                                  )}
+                                </div>
+                              )}
 
-                                    {/* Input Repeticiones */}
-                                    <div className="flex items-center justify-center">
-                                      <input
-                                        type="number"
-                                        step="1"
-                                        min="0"
-                                        value={set.reps === 0 ? '' : set.reps}
-                                        placeholder="0"
-                                        onChange={(e) =>
-                                          handleUpdateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0)
-                                        }
-                                        className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
-                                      />
-                                    </div>
-
-                                    {/* Selector Opcional RIR (0, 1, 2, 3+) */}
-                                    <div className="flex items-center justify-center">
-                                      <select
-                                        aria-label={t.rirColHeader}
-                                        value={set.rir === undefined ? '' : String(set.rir)}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          handleUpdateSet(
-                                            exIdx,
-                                            setIdx,
-                                            'rir',
-                                            val === '' ? undefined : parseInt(val, 10)
-                                          );
-                                        }}
-                                        className={`w-full text-center bg-slate-900 border focus:border-emerald-500 rounded-lg py-1.5 px-0.5 text-xs font-black font-mono-numbers focus:outline-none cursor-pointer ${
-                                          set.rir !== undefined
-                                            ? 'border-cyan-500/50 text-cyan-300'
-                                            : 'border-slate-700 text-slate-400'
-                                        }`}
-                                      >
-                                        <option value="">—</option>
-                                        <option value="0">0</option>
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                        <option value="3">3+</option>
-                                      </select>
-                                    </div>
-
-                                    {/* Casilla de Verificación Táctil + Quitar Serie */}
-                                    <div className="flex items-center justify-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateSet(exIdx, setIdx, 'completed', !set.completed)}
-                                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
-                                          set.completed
-                                            ? 'bg-emerald-500 text-slate-950 shadow-emerald-500/30 font-black'
-                                            : 'bg-slate-800 text-slate-500 hover:text-slate-300 border border-slate-700'
-                                        }`}
-                                      >
-                                        <Check className={`w-4 h-4 ${set.completed ? 'stroke-[3]' : ''}`} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveSet(exIdx, setIdx)}
-                                        className="text-slate-600 hover:text-rose-400 p-0.5 rounded transition text-xs"
-                                        title={lang === 'en' ? 'Remove set' : 'Quitar serie'}
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Botones de acción al pie del ejercicio: Añadir Serie, Confirmar Fin de Ejercicio y Plegar */}
-                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddSet(exIdx)}
-                                  className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
-                                >
-                                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>{t.addSetBtn}</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleExerciseFinished(workoutEx.id)}
-                                  className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-xl border active:scale-95 transition shadow-sm ${
-                                    workoutEx.isCompleted
-                                      ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                                      : 'bg-emerald-500 text-slate-950 border-emerald-400 hover:bg-emerald-400 shadow-emerald-500/20'
-                                  }`}
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>
-                                    {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
-                                  </span>
-                                </button>
+                              {/* Cabecera de Columnas de Series (6 Columnas: SET, PREV, KG/+KG, REPS, RIR, OK) */}
+                              <div className="grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-0.5 text-center items-center">
+                                <span className="text-left">{t.setColHeader}</span>
+                                <span>{t.prevColHeader}</span>
+                                <span>{isBodyweightEx ? t.addedLoadColHeader(settings.unit) : settings.unit.toUpperCase()}</span>
+                                <span>{t.repsColHeader}</span>
+                                <span>{t.rirColHeader}</span>
+                                <span>{t.doneColHeader}</span>
                               </div>
 
+                              {/* Filas de Series */}
+                              <div className="space-y-1.5">
+                                {workoutEx.sets.map((set, setIdx) => {
+                                  const prevSet = previousSets[setIdx] || previousSets[previousSets.length - 1];
+                                  const ghostText = prevSet
+                                    ? `${isBodyweightEx && prevSet.weight > 0 ? `+${prevSet.weight}` : prevSet.weight}×${prevSet.reps}`
+                                    : '—';
+                                  const effectiveWeight = getEffectiveSetWeight(
+                                    set,
+                                    workoutEx,
+                                    exercises,
+                                    settings.userBodyweight ?? 75
+                                  );
+                                  const est1RM = calculate1RM(effectiveWeight, set.reps);
+
+                                  return (
+                                    <div
+                                      key={set.id}
+                                      className={`grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 items-center p-1.5 rounded-xl transition-all ${
+                                        set.completed
+                                          ? 'bg-emerald-950/20 border border-emerald-500/30'
+                                          : set.type === 'B'
+                                          ? 'bg-amber-950/20 border border-amber-500/40'
+                                          : 'bg-slate-950/70 border border-slate-800/60'
+                                      }`}
+                                    >
+                                      {/* Tipo / Número de Serie */}
+                                      <div className="flex flex-col items-center justify-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentIdx = availableSetTypes.indexOf(set.type);
+                                            const nextType = availableSetTypes[(currentIdx + 1) % availableSetTypes.length];
+                                            handleUpdateSet(exIdx, setIdx, 'type', nextType);
+                                          }}
+                                          className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition active:scale-90 ${
+                                            set.type === 'B'
+                                              ? 'bg-amber-500 text-slate-950 border border-amber-400 shadow-sm'
+                                              : set.type === 'W'
+                                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                              : set.type === 'F'
+                                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                                              : set.type === 'D'
+                                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
+                                              : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                          }`}
+                                          title={`Tipo: ${
+                                            set.type === 'B'
+                                              ? t.bilboBadge
+                                              : set.type === 'W'
+                                              ? 'Calentamiento'
+                                              : set.type === 'F'
+                                              ? 'Fallo Muscular'
+                                              : set.type === 'D'
+                                              ? 'Drop Set'
+                                              : 'Normal'
+                                          } (Click para cambiar)`}
+                                        >
+                                          {set.type === 'N' ? setIdx + 1 : set.type}
+                                        </button>
+                                        {set.completed && est1RM > 0 && (
+                                          <span
+                                            className="hidden sm:inline text-[8px] font-bold text-slate-500 mt-0.5"
+                                            title="1RM Estimada (Epley)"
+                                          >
+                                            {est1RM}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Ghost Data previo */}
+                                      <div className="text-center text-[11px] font-mono-numbers text-slate-500 truncate select-text">
+                                        {ghostText}
+                                      </div>
+
+                                      {/* Input Peso o Lastre (+kg) */}
+                                      <div className="flex items-center justify-center">
+                                        <input
+                                          type="number"
+                                          step="0.5"
+                                          min="0"
+                                          value={set.weight === 0 ? '' : set.weight}
+                                          placeholder={isBodyweightEx ? '+0' : '0'}
+                                          onChange={(e) =>
+                                            handleUpdateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)
+                                          }
+                                          className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
+                                        />
+                                      </div>
+
+                                      {/* Input Repeticiones */}
+                                      <div className="flex items-center justify-center">
+                                        <input
+                                          type="number"
+                                          step="1"
+                                          min="0"
+                                          value={set.reps === 0 ? '' : set.reps}
+                                          placeholder="0"
+                                          onChange={(e) =>
+                                            handleUpdateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0)
+                                          }
+                                          className="w-full text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1.5 text-xs sm:text-sm font-black font-mono-numbers text-white focus:outline-none"
+                                        />
+                                      </div>
+
+                                      {/* Selector Opcional RIR (0, 1, 2, 3+) */}
+                                      <div className="flex items-center justify-center">
+                                        <select
+                                          aria-label={t.rirColHeader}
+                                          value={set.rir === undefined ? '' : String(set.rir)}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            handleUpdateSet(
+                                              exIdx,
+                                              setIdx,
+                                              'rir',
+                                              val === '' ? undefined : parseInt(val, 10)
+                                            );
+                                          }}
+                                          className={`w-full text-center bg-slate-900 border focus:border-emerald-500 rounded-lg py-1.5 px-0.5 text-xs font-black font-mono-numbers focus:outline-none cursor-pointer ${
+                                            set.rir !== undefined
+                                              ? 'border-cyan-500/50 text-cyan-300'
+                                              : 'border-slate-700 text-slate-400'
+                                          }`}
+                                        >
+                                          <option value="">—</option>
+                                          <option value="0">0</option>
+                                          <option value="1">1</option>
+                                          <option value="2">2</option>
+                                          <option value="3">3+</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Casilla de Verificación Táctil + Quitar Serie */}
+                                      <div className="flex items-center justify-center gap-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSet(exIdx, setIdx, 'completed', !set.completed)}
+                                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
+                                            set.completed
+                                              ? 'bg-emerald-500 text-slate-950 shadow-emerald-500/30 font-black'
+                                              : 'bg-slate-800 text-slate-500 hover:text-slate-300 border border-slate-700'
+                                          }`}
+                                        >
+                                          <Check className={`w-4 h-4 ${set.completed ? 'stroke-[3]' : ''}`} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveSet(exIdx, setIdx)}
+                                          className="text-slate-600 hover:text-rose-400 p-0.5 rounded transition text-xs"
+                                          title={lang === 'en' ? 'Remove set' : 'Quitar serie'}
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Botones de acción al pie del ejercicio: Añadir Serie (u oculto en Bilbo), Confirmar Fin y Plegar */}
+                              <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  {isBilboActive ? (
+                                    <span className="text-[11px] font-bold text-amber-300 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                      {t.bilboSingleSetNote}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddSet(exIdx)}
+                                      className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
+                                    >
+                                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span>{t.addSetBtn}</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleExerciseFinished(workoutEx.id)}
+                                    className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-xl border active:scale-95 transition shadow-sm ${
+                                      workoutEx.isCompleted
+                                        ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                        : 'bg-emerald-500 text-slate-950 border-emerald-400 hover:bg-emerald-400 shadow-emerald-500/20'
+                                    }`}
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                                    <span>
+                                      {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
+                                    </span>
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExerciseExpand(workoutEx.id)}
+                                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
+                                >
+                                  {lang === 'en' ? 'Collapse exercise ▲' : 'Plegar ejercicio ▲'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    // Agrupar visualmente ejercicios contiguos con el mismo supersetGroupId (solo si enableSupersets está activo)
+                    const blocks: Array<
+                      | { type: 'superset'; group: string; items: Array<{ ex: WorkoutExercise; displayIdx: number }> }
+                      | { type: 'single'; ex: WorkoutExercise; displayIdx: number }
+                    > = [];
+
+                    let idxCursor = 0;
+                    while (idxCursor < sortedWorkoutExercises.length) {
+                      const current = sortedWorkoutExercises[idxCursor];
+                      const group = settings.enableSupersets ? current.supersetGroupId : undefined;
+                      if (group) {
+                        const items: Array<{ ex: WorkoutExercise; displayIdx: number }> = [
+                          { ex: current, displayIdx: idxCursor },
+                        ];
+                        let nextCursor = idxCursor + 1;
+                        while (
+                          nextCursor < sortedWorkoutExercises.length &&
+                          sortedWorkoutExercises[nextCursor].supersetGroupId === group
+                        ) {
+                          items.push({ ex: sortedWorkoutExercises[nextCursor], displayIdx: nextCursor });
+                          nextCursor++;
+                        }
+                        if (items.length >= 2) {
+                          blocks.push({ type: 'superset', group, items });
+                          idxCursor = nextCursor;
+                          continue;
+                        }
+                      }
+                      blocks.push({ type: 'single', ex: current, displayIdx: idxCursor });
+                      idxCursor++;
+                    }
+
+                    return blocks.map((block, bIdx) => {
+                      if (block.type === 'superset') {
+                        const style = getSupersetStyle(block.group);
+                        const summaryLabel = block.items
+                          .map((it, sIdx) => {
+                            const exMeta = exercises.find((e) => e.id === it.ex.exerciseId);
+                            return `${block.group}${sIdx + 1} ${exMeta ? getExerciseName(exMeta, lang) : ''}`;
+                          })
+                          .join(' + ');
+
+                        return (
+                          <div
+                            key={`active-ss-${block.group}-${bIdx}`}
+                            className={`rounded-2xl border-2 overflow-hidden shadow-lg ${style.container}`}
+                          >
+                            <div className={`px-3.5 py-2.5 flex items-center justify-between gap-2 ${style.headerBg}`}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Link2 className={`w-4 h-4 shrink-0 ${style.text}`} />
+                                <span className={`text-xs font-black truncate ${style.text}`}>
+                                  {t.supersetLabel(block.group)}: {summaryLabel}
+                                </span>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => toggleExerciseExpand(workoutEx.id)}
-                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
+                                onClick={() => handleUnlinkWorkoutSuperset(block.group)}
+                                className="text-[10px] font-bold text-slate-300 hover:text-rose-400 flex items-center gap-1 shrink-0 px-2 py-1 rounded-lg bg-slate-900/60 border border-slate-700/60 active:scale-95 transition"
                               >
-                                {lang === 'en' ? 'Collapse exercise ▲' : 'Plegar ejercicio ▲'}
+                                <Unlink className="w-3 h-3" />
+                                <span>{t.supersetUnlinkBtn}</span>
                               </button>
                             </div>
+                            <div className="p-2.5 space-y-2.5">
+                              {block.items.map((it, sIdx) =>
+                                renderWorkoutExerciseCard(
+                                  it.ex,
+                                  it.displayIdx,
+                                  `${block.group}${sIdx + 1}`,
+                                  style.badge
+                                )
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      }
+
+                      return renderWorkoutExerciseCard(block.ex, block.displayIdx);
+                    });
+                  })()}
                 </div>
 
                 {/* Botón de Añadir Ejercicio al Entreno */}
@@ -5067,6 +5960,50 @@ export default function App() {
                   }}
                   className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
                     settings.vibrateEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
+                </button>
+              </div>
+
+              {/* Opción: Método Bilbo (Desactivado por defecto) */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Zap className={`w-4 h-4 ${settings.enableBilboMethod ? 'text-amber-400' : 'text-slate-500'}`} />
+                  <span className="text-sm font-extrabold text-white">{t.bilboSettingTitle}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      enableBilboMethod: !prev.enableBilboMethod,
+                    }))
+                  }
+                  className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
+                    settings.enableBilboMethod ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
+                </button>
+              </div>
+
+              {/* Opción: Gestión de Superseries (Desactivado por defecto) */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Link2 className={`w-4 h-4 ${settings.enableSupersets ? 'text-cyan-400' : 'text-slate-500'}`} />
+                  <span className="text-sm font-extrabold text-white">{t.supersetsSettingTitle}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      enableSupersets: !prev.enableSupersets,
+                    }))
+                  }
+                  className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
+                    settings.enableSupersets ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
                   }`}
                 >
                   <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
