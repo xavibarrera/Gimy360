@@ -77,8 +77,14 @@ export interface Translations {
   targetColHeader: string;
   weightColHeader: string;
   repsColHeader: string;
+  rirColHeader: string;
   doneColHeader: string;
   rpeColHeader: string;
+  calisthenicsBadge: string;
+  includeBodyweightLabel: string;
+  addedLoadOnlyLabel: string;
+  addedLoadColHeader: (unit: string) => string;
+  bodyweightInputLabel: string;
   notesPlaceholder: string;
   restTimerModalTitle: string;
   minRestTimer: string;
@@ -218,8 +224,15 @@ export interface Translations {
   themeLightSub: string;
   weightUnitTitle: string;
   weightUnitSub: string;
+  bodyweightSettingTitle: string;
+  bodyweightSettingSub: string;
   restTimerTitle: string;
   restTimerSub: string;
+  restTimerCustomLabel: string;
+  restTimerPresetsLabel: string;
+  restTimerAutoTitle: string;
+  restTimerAutoSub: string;
+  startRestBtn: string;
   soundTitle: string;
   soundSub: string;
   vibrateTitle: string;
@@ -302,7 +315,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     cancelWorkoutKeep: 'Continuar Entrenando',
     addSetBtn: '+ Añadir Serie',
     addExerciseToSession: 'Añadir Ejercicio a la Sesión',
-    swapExerciseBtn: 'Cambiar Ejercicio',
+    swapExerciseBtn: 'Sustituir',
     deleteExerciseModalTitle: '¿Eliminar Ejercicio?',
     deleteExerciseModalDesc: (name) => `¿Seguro que deseas eliminar «${name}» de esta sesión de entrenamiento?`,
     deleteExerciseModalRoutineNote: 'Nota: Si proviene de una rutina guardada, también se quitará de la plantilla para próximos entrenamientos.',
@@ -317,8 +330,14 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     targetColHeader: 'OBJETIVO',
     weightColHeader: 'CARGA',
     repsColHeader: 'REPS',
+    rirColHeader: 'RIR',
     doneColHeader: 'LISTO',
     rpeColHeader: 'RPE',
+    calisthenicsBadge: 'Calistenia · Peso Corporal',
+    includeBodyweightLabel: 'Sumar peso corporal al volumen',
+    addedLoadOnlyLabel: 'Solo lastre (+kg)',
+    addedLoadColHeader: (unit) => `+${unit.toUpperCase()}`,
+    bodyweightInputLabel: 'Peso corporal',
     notesPlaceholder: 'Añadir notas técnicas o sensaciones...',
     restTimerModalTitle: 'Descanso en Curso',
     minRestTimer: 'Minimizar',
@@ -458,8 +477,15 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     themeLightSub: 'Modo Claro',
     weightUnitTitle: 'Unidad de Peso',
     weightUnitSub: 'Kilogramos o Libras',
-    restTimerTitle: 'Temporizador de Descanso',
-    restTimerSub: 'Segundos sugeridos entre series completadas',
+    bodyweightSettingTitle: 'Peso Corporal (Calistenia)',
+    bodyweightSettingSub: 'Usado para calcular el tonelaje exacto en ejercicios corporales',
+    restTimerTitle: 'Tiempo de Descanso',
+    restTimerSub: 'Duración por defecto entre series (personalizable)',
+    restTimerCustomLabel: 'Personalizado (seg)',
+    restTimerPresetsLabel: 'Preajustes rápidos',
+    restTimerAutoTitle: 'Inicio automático al completar serie',
+    restTimerAutoSub: 'Inicia la cuenta atrás al marcar una serie como lista',
+    startRestBtn: 'Descanso',
     soundTitle: 'Efectos de Sonido',
     soundSub: 'Pitido sonoro al finalizar la cuenta atrás',
     vibrateTitle: 'Vibración Háptica',
@@ -541,7 +567,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     cancelWorkoutKeep: 'Keep Training',
     addSetBtn: '+ Add Set',
     addExerciseToSession: 'Add Exercise to Session',
-    swapExerciseBtn: 'Swap Exercise',
+    swapExerciseBtn: 'Swap',
     deleteExerciseModalTitle: 'Remove Exercise?',
     deleteExerciseModalDesc: (name) => `Are you sure you want to remove "${name}" from this workout session?`,
     deleteExerciseModalRoutineNote: 'Note: If it belongs to a saved routine, it will also be removed from the template for future workouts.',
@@ -556,8 +582,14 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     targetColHeader: 'TARGET',
     weightColHeader: 'LOAD',
     repsColHeader: 'REPS',
+    rirColHeader: 'RIR',
     doneColHeader: 'DONE',
     rpeColHeader: 'RPE',
+    calisthenicsBadge: 'Calisthenics · Bodyweight',
+    includeBodyweightLabel: 'Include bodyweight in volume',
+    addedLoadOnlyLabel: 'Added weight only',
+    addedLoadColHeader: (unit) => `+${unit.toUpperCase()}`,
+    bodyweightInputLabel: 'Bodyweight',
     notesPlaceholder: 'Add technique cues or notes...',
     restTimerModalTitle: 'Rest in Progress',
     minRestTimer: 'Minimise',
@@ -697,8 +729,15 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     themeLightSub: 'Light Mode',
     weightUnitTitle: 'Weight Unit',
     weightUnitSub: 'Kilograms or Pounds',
+    bodyweightSettingTitle: 'Bodyweight (Calisthenics)',
+    bodyweightSettingSub: 'Used for accurate total volume in bodyweight exercises',
     restTimerTitle: 'Default Rest Timer',
-    restTimerSub: 'Suggested rest seconds between completed sets',
+    restTimerSub: 'Customisable rest duration between sets',
+    restTimerCustomLabel: 'Custom (sec)',
+    restTimerPresetsLabel: 'Quick presets',
+    restTimerAutoTitle: 'Auto-start on completed set',
+    restTimerAutoSub: 'Starts the countdown automatically when ticking a set',
+    startRestBtn: 'Rest',
     soundTitle: 'Sound Effects',
     soundSub: 'Audio alert when countdown reaches zero',
     vibrateTitle: 'Haptic Feedback',

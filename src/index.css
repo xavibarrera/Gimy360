@@ -45,7 +45,7 @@
 }
 
 /* ==========================================================================
-   MODO CLARO (LIGHT THEME) OVERRIDES
+   MODO CLARO (LIGHT THEME) PALETA REVISADA Y COMPLETA
    ========================================================================== */
 [data-theme="light"],
 .theme-light {
@@ -54,7 +54,7 @@
 
 [data-theme="light"] body,
 body:has([data-theme="light"]) {
-  background-color: #f8fafc !important;
+  background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
@@ -68,53 +68,137 @@ body:has([data-theme="light"]) {
   background: #94a3b8;
 }
 
-/* Backgrounds in Light Mode */
-[data-theme="light"] .bg-slate-950,
-[data-theme="light"] .bg-slate-950\/80,
-[data-theme="light"] .bg-slate-950\/90,
+/* 1. Lienzo base y contenedores internos hundidos (slate-950*) */
+[data-theme="light"] .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
 [data-theme="light"] .bg-slate-950\/95 {
+  background-color: rgba(241, 245, 249, 0.96) !important;
+}
+[data-theme="light"] .bg-slate-950\/90 {
+  background-color: rgba(241, 245, 249, 0.92) !important;
+}
+[data-theme="light"] .bg-slate-950\/80,
+[data-theme="light"] .bg-slate-950\/70,
+[data-theme="light"] .bg-slate-950\/60,
+[data-theme="light"] .bg-slate-950\/40,
+[data-theme="light"] .bg-slate-950\/30 {
   background-color: #f8fafc !important;
 }
+[data-theme="light"] .hover\:bg-slate-950:hover {
+  background-color: #e2e8f0 !important;
+}
 
+/* 2. Tarjetas, paneles elevados, barras fijas y modales (slate-900*) */
 [data-theme="light"] .bg-slate-900,
+[data-theme="light"] .bg-slate-900\/95,
 [data-theme="light"] .bg-slate-900\/90,
 [data-theme="light"] .bg-slate-900\/80,
-[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/60 {
+  background-color: #ffffff !important;
+}
 [data-theme="light"] .bg-slate-900\/50 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .hover\:bg-slate-900:hover,
+[data-theme="light"] .hover\:bg-slate-900\/60:hover {
   background-color: #ffffff !important;
 }
 
+/* 3. Superficies interactivas secundarias y estados hover (slate-850..700) */
 [data-theme="light"] .bg-slate-850,
+[data-theme="light"] .bg-slate-850\/60,
+[data-theme="light"] .bg-slate-800\/90,
 [data-theme="light"] .bg-slate-800\/80,
-[data-theme="light"] .bg-slate-800\/90 {
+[data-theme="light"] .bg-slate-800\/70,
+[data-theme="light"] .bg-slate-800\/50 {
   background-color: #f1f5f9 !important;
 }
-
 [data-theme="light"] .bg-slate-800 {
   background-color: #e2e8f0 !important;
 }
-
-[data-theme="light"] .hover\:bg-slate-800:hover {
+[data-theme="light"] .bg-slate-750,
+[data-theme="light"] .bg-slate-700 {
+  background-color: #cbd5e1 !important;
+}
+[data-theme="light"] .hover\:bg-slate-850:hover,
+[data-theme="light"] .hover\:bg-slate-850\/60:hover,
+[data-theme="light"] .hover\:bg-slate-800:hover,
+[data-theme="light"] .hover\:bg-slate-800\/80:hover,
+[data-theme="light"] .hover\:bg-slate-800\/70:hover {
   background-color: #f1f5f9 !important;
 }
+[data-theme="light"] .hover\:bg-slate-750:hover,
 [data-theme="light"] .hover\:bg-slate-700:hover {
-  background-color: #e2e8f0 !important;
+  background-color: #cbd5e1 !important;
 }
 
-/* Borders in Light Mode */
+/* 4. Degradados oscuros adaptados a claro */
+[data-theme="light"] .from-slate-900 {
+  --tw-gradient-from: #ffffff !important;
+}
+[data-theme="light"] .via-slate-900 {
+  --tw-gradient-via: #f8fafc !important;
+}
+[data-theme="light"] .to-slate-800,
+[data-theme="light"] .to-slate-800\/80,
+[data-theme="light"] .to-slate-950 {
+  --tw-gradient-to: #f1f5f9 !important;
+}
+[data-theme="light"] .from-purple-950 {
+  --tw-gradient-from: #faf5ff !important;
+}
+[data-theme="light"] .to-pink-950 {
+  --tw-gradient-to: #fdf2f8 !important;
+}
+
+/* 5. Fondos semánticos suaves (-950/*) */
+[data-theme="light"] .bg-emerald-950\/20,
+[data-theme="light"] .bg-emerald-950\/40 {
+  background-color: #ecfdf5 !important;
+}
+[data-theme="light"] .bg-emerald-950\/60 {
+  background-color: #d1fae5 !important;
+}
+[data-theme="light"] .bg-cyan-950\/20,
+[data-theme="light"] .bg-cyan-950\/30,
+[data-theme="light"] .bg-cyan-950\/40 {
+  background-color: #ecfeff !important;
+}
+[data-theme="light"] .bg-cyan-950\/60 {
+  background-color: #cffafe !important;
+}
+[data-theme="light"] .bg-amber-950\/40 {
+  background-color: #fffbeb !important;
+}
+[data-theme="light"] .bg-purple-950\/40 {
+  background-color: #faf5ff !important;
+}
+
+/* 6. Bordes y divisores */
 [data-theme="light"] .border-slate-800,
 [data-theme="light"] .border-slate-800\/90,
 [data-theme="light"] .border-slate-800\/80,
+[data-theme="light"] .border-slate-800\/60,
+[data-theme="light"] .border-slate-800\/40 {
+  border-color: #e2e8f0 !important;
+}
 [data-theme="light"] .border-slate-700,
 [data-theme="light"] .border-slate-700\/80,
 [data-theme="light"] .border-slate-700\/50 {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .hover\:border-slate-700:hover {
+  border-color: #94a3b8 !important;
+}
+[data-theme="light"] .divide-slate-800 > :not(:last-child),
+[data-theme="light"] .divide-slate-800\/60 > :not(:last-child),
+[data-theme="light"] .divide-slate-800\/40 > :not(:last-child) {
   border-color: #e2e8f0 !important;
 }
 
-/* Text Colors in Light Mode */
-[data-theme="light"] .text-white {
-  color: #0f172a !important;
-}
+/* 7. Jerarquía de texto en modo claro */
+[data-theme="light"] .text-white,
 [data-theme="light"] .text-slate-100 {
   color: #0f172a !important;
 }
@@ -127,33 +211,87 @@ body:has([data-theme="light"]) {
 [data-theme="light"] .text-slate-400 {
   color: #475569 !important;
 }
-[data-theme="light"] .text-slate-500 {
+[data-theme="light"] .text-slate-500,
+[data-theme="light"] .text-slate-600 {
   color: #64748b !important;
 }
+[data-theme="light"] .hover\:text-white:hover,
+[data-theme="light"] .hover\:text-slate-200:hover,
+[data-theme="light"] .hover\:text-slate-300:hover {
+  color: #0f172a !important;
+}
 
-/* Ensure buttons with solid emerald background have dark crisp text */
+/* 8. Acentos de color legibles sobre fondo claro */
+[data-theme="light"] .text-emerald-300,
+[data-theme="light"] .text-emerald-400 {
+  color: #059669 !important;
+}
+[data-theme="light"] .text-cyan-300,
+[data-theme="light"] .text-cyan-400 {
+  color: #0891b2 !important;
+}
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-400\/90 {
+  color: #d97706 !important;
+}
+[data-theme="light"] .text-rose-300,
+[data-theme="light"] .text-rose-400 {
+  color: #e11d48 !important;
+}
+[data-theme="light"] .text-purple-400 {
+  color: #9333ea !important;
+}
+[data-theme="light"] .text-pink-300,
+[data-theme="light"] .text-pink-400 {
+  color: #db2777 !important;
+}
+[data-theme="light"] .text-blue-400 {
+  color: #2563eb !important;
+}
+[data-theme="light"] .text-indigo-400 {
+  color: #4f46e5 !important;
+}
+[data-theme="light"] .text-orange-400 {
+  color: #ea580c !important;
+}
+[data-theme="light"] .text-yellow-400 {
+  color: #ca8a04 !important;
+}
+
+/* 9. Mantener contraste nítido en botones sólidos y degradados de acción */
 [data-theme="light"] .bg-emerald-500,
 [data-theme="light"] .bg-emerald-400 {
   color: #020617 !important;
 }
 [data-theme="light"] .bg-emerald-500 .text-slate-950,
 [data-theme="light"] .bg-emerald-500 span,
-[data-theme="light"] .bg-emerald-500 svg {
+[data-theme="light"] .bg-emerald-500 svg,
+[data-theme="light"] .bg-emerald-400 span,
+[data-theme="light"] .bg-emerald-400 svg {
   color: #020617 !important;
 }
 
-/* Header and Navigation sticky elements */
+[data-theme="light"] .bg-rose-600,
+[data-theme="light"] .bg-rose-600 *,
+[data-theme="light"] .bg-rose-500,
+[data-theme="light"] .bg-rose-500 *,
+[data-theme="light"] .from-purple-600,
+[data-theme="light"] .from-purple-600 * {
+  color: #ffffff !important;
+}
+
+/* 10. Cabecera y barra inferior translúcidas en modo claro */
 [data-theme="light"] header {
-  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-color: rgba(255, 255, 255, 0.94) !important;
   border-bottom-color: #e2e8f0 !important;
 }
 
 [data-theme="light"] nav {
-  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-color: rgba(255, 255, 255, 0.96) !important;
   border-top-color: #e2e8f0 !important;
 }
 
-/* Inputs, Selects, Textareas */
+/* 11. Campos de entrada, selectores y áreas de texto */
 [data-theme="light"] input,
 [data-theme="light"] select,
 [data-theme="light"] textarea {
@@ -165,9 +303,15 @@ body:has([data-theme="light"]) {
 [data-theme="light"] textarea::placeholder {
   color: #94a3b8 !important;
 }
-
-/* Modals with backdrop */
-[data-theme="light"] .bg-slate-950\/80,
-[data-theme="light"] .bg-black\/80 {
-  background-color: rgba(15, 23, 42, 0.6) !important;
+[data-theme="light"] input[type="range"] {
+  background-color: transparent !important;
+  border-color: transparent !important;
 }
+
+/* 12. Fondo oscuro difuminado únicamente para overlays de modales */
+[data-theme="light"] .bg-black\/80,
+[data-theme="light"] .bg-black\/85,
+[data-theme="light"] .bg-black\/90 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+

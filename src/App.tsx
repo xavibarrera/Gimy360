@@ -150,6 +150,8 @@ export interface WorkoutSet {
   type: SetType;
   weight: number;
   reps: number;
+  rir?: number; // 0, 1, 2, 3 (3+ reps in reserve)
+  bodyweightKg?: number; // Snapshot del peso corporal en ejercicios de calistenia
   completed: boolean;
   completedAt?: number;
 }
@@ -161,6 +163,8 @@ export interface WorkoutExercise {
   sets: WorkoutSet[];
   isCompleted?: boolean;
   completedAt?: number;
+  includeBodyweight?: boolean;
+  bodyweightKg?: number;
 }
 
 export interface WorkoutSession {
@@ -187,6 +191,8 @@ export interface Routine {
 export interface AppSettings {
   unit: 'kg' | 'lb';
   defaultRestTime: number; // segundos
+  autoStartRestTimer?: boolean;
+  userBodyweight?: number; // Peso corporal para ejercicios de calistenia
   soundEnabled: boolean;
   vibrateEnabled: boolean;
   theme?: 'dark' | 'light';
@@ -845,9 +851,26 @@ export function generateIntelligentRoutines(config: WizardConfig, allExercises: 
   return results;
 }
 
+// Calcula la carga efectiva de una serie (incluyendo peso corporal + lastre en calistenia)
+export function getEffectiveSetWeight(
+  set: WorkoutSet,
+  workoutEx: WorkoutExercise,
+  exercisesList: Exercise[],
+  defaultBodyweight: number = 75
+): number {
+  const exInfo = exercisesList.find((e) => e.id === workoutEx.exerciseId);
+  if (exInfo?.equipment === 'corporal') {
+    const useBw = workoutEx.includeBodyweight !== false;
+    const bw = set.bodyweightKg ?? workoutEx.bodyweightKg ?? defaultBodyweight;
+    return (useBw ? Math.max(0, bw) : 0) + Math.max(0, set.weight);
+  }
+  return Math.max(0, set.weight);
+}
+
 export interface ProgressiveOverloadFeedback {
   hasHistory: boolean;
   shouldIncrease: boolean;
+  badgeText: string;
   message: string;
   previousWeight: number;
   previousReps: number;
@@ -858,32 +881,60 @@ export function getProgressiveOverloadFeedback(
   exerciseId: string,
   history: WorkoutSession[],
   unit: 'kg' | 'lb',
-  lang: Language = 'es'
+  lang: Language = 'es',
+  exercisesList: Exercise[] = [],
+  defaultBodyweight: number = 75
 ): ProgressiveOverloadFeedback {
+  const isBodyweightEx = exercisesList.find((e) => e.id === exerciseId)?.equipment === 'corporal';
+
   for (const session of history) {
     const match = session.exercises.find((e) => e.exerciseId === exerciseId);
     if (match && match.sets && match.sets.length > 0) {
-      const completedSets = match.sets.filter((s) => s.completed && s.type !== 'W');
-      if (completedSets.length > 0) {
-        const maxWeight = Math.max(...completedSets.map((s) => s.weight));
-        const avgReps = Math.round(completedSets.reduce((sum, s) => sum + s.reps, 0) / completedSets.length);
-        const shouldIncrease = avgReps >= 8 && maxWeight > 0;
-        const incText = unit === 'kg' ? (lang === 'en' ? '+2.5 kg or +1 rep' : '+2.5 kg o +1 rep') : (lang === 'en' ? '+5 lb or +1 rep' : '+5 lb o +1 rep');
+      const workingSets = match.sets.filter((s) => s.type !== 'W');
+      const relevantSets = workingSets.length > 0 ? workingSets : match.sets;
+      const completedSets = relevantSets.filter((s) => s.completed);
 
+      if (completedSets.length > 0) {
+        const allTargetSetsCompleted = completedSets.length === relevantSets.length;
+        const maxWeight = Math.max(...completedSets.map((s) => s.weight));
+        const maxEffectiveWeight = Math.max(
+          ...completedSets.map((s) => getEffectiveSetWeight(s, match, exercisesList, defaultBodyweight))
+        );
+        const avgReps = Math.round(completedSets.reduce((sum, s) => sum + s.reps, 0) / completedSets.length);
+        const minReps = Math.min(...completedSets.map((s) => s.reps));
+
+        const shouldIncrease =
+          (allTargetSetsCompleted && minReps >= 6 && (maxWeight > 0 || isBodyweightEx)) ||
+          (avgReps >= 8 && (maxWeight > 0 || isBodyweightEx));
+
+        const incAmt = unit === 'kg' ? '+2.5 kg' : '+5 lb';
+        let badgeText = '';
         let message = '';
+
         if (lang === 'en') {
+          badgeText = isBodyweightEx && maxWeight === 0
+            ? '💡 Today: Try +1 rep or add load'
+            : `💡 Suggestion: Try ${incAmt} or +1 rep`;
           message = shouldIncrease
-            ? `💡 Suggestion: Last session you completed ${completedSets.length} sets at ${maxWeight} ${unit} × ${avgReps} reps. Try ${incText} today!`
-            : `🎯 Previous record: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} sets). Maintain strict form before increasing load.`;
+            ? isBodyweightEx && maxWeight === 0
+              ? `💡 Today's suggestion: Last session you completed all ${completedSets.length} sets (${avgReps} reps). Try +1 rep or add ${incAmt} load today!`
+              : `💡 Today's suggestion: Try ${incAmt} or +1 rep (last: ${maxWeight} ${unit} × ${avgReps} reps, ${completedSets.length} sets completed).`
+            : `🎯 Previous record: ${maxEffectiveWeight > maxWeight ? `${maxWeight > 0 ? `+${maxWeight} ` : 'BW '}` : `${maxWeight} `}${unit} × ${avgReps} reps (${completedSets.length} sets). Consolidate form before increasing load.`;
         } else {
+          badgeText = isBodyweightEx && maxWeight === 0
+            ? '💡 Sugerencia hoy: +1 repetición o añadir lastre'
+            : `💡 Sugerencia hoy: Prueba ${incAmt} o +1 repetición`;
           message = shouldIncrease
-            ? `💡 Sugerencia: En tu última sesión completaste ${completedSets.length} series a ${maxWeight} ${unit} × ${avgReps} reps. ¡Intenta ${incText} hoy!`
-            : `🎯 Marca anterior: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} series). Consolida la técnica antes de aumentar peso.`;
+            ? isBodyweightEx && maxWeight === 0
+              ? `💡 Sugerencia hoy: Completaste todas las series (${completedSets.length} × ${avgReps} reps). ¡Prueba +1 repetición o añade ${incAmt} de lastre!`
+              : `💡 Sugerencia hoy: Prueba ${incAmt} o +1 repetición (última sesión: ${maxWeight} ${unit} × ${avgReps} reps en ${completedSets.length} series).`
+            : `🎯 Marca anterior: ${maxWeight} ${unit} × ${avgReps} reps (${completedSets.length} series). Consolida la técnica antes de subir carga.`;
         }
 
         return {
           hasHistory: true,
           shouldIncrease,
+          badgeText,
           message,
           previousWeight: maxWeight,
           previousReps: avgReps,
@@ -895,6 +946,7 @@ export function getProgressiveOverloadFeedback(
   return {
     hasHistory: false,
     shouldIncrease: false,
+    badgeText: '',
     message: lang === 'en'
       ? '🎯 First time with this exercise: calibrate a moderate weight to master proper form.'
       : '🎯 Primera vez con este ejercicio: calibra un peso moderado para dominar la técnica.',
@@ -1202,13 +1254,19 @@ function drawRoundedRect(
 
 export type InstagramStoryTheme = 'sunset' | 'emerald' | 'cyan';
 
-export function getInstagramCaptionText(session: WorkoutSession, unit: string, lang: Language = 'es'): string {
+export function getInstagramCaptionText(
+  session: WorkoutSession,
+  unit: string,
+  lang: Language = 'es',
+  exercisesList: Exercise[] = [],
+  defaultBodyweight: number = 75
+): string {
   let totalVol = 0;
   let totalSets = 0;
   session.exercises.forEach((ex) => {
     ex.sets.forEach((s) => {
       if (s.completed) {
-        totalVol += s.weight * s.reps;
+        totalVol += getEffectiveSetWeight(s, ex, exercisesList, defaultBodyweight) * s.reps;
         totalSets += 1;
       }
     });
@@ -1241,7 +1299,8 @@ export function renderInstagramStoryCanvas(
   exercisesList: Exercise[],
   unit: string,
   theme: InstagramStoryTheme,
-  lang: Language = 'es'
+  lang: Language = 'es',
+  defaultBodyweight: number = 75
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -1361,7 +1420,7 @@ export function renderInstagramStoryCanvas(
   session.exercises.forEach((ex) => {
     ex.sets.forEach((s) => {
       if (s.completed) {
-        totalVol += s.weight * s.reps;
+        totalVol += getEffectiveSetWeight(s, ex, exercisesList, defaultBodyweight) * s.reps;
         totalSets += 1;
       }
     });
@@ -1532,10 +1591,16 @@ export default function App() {
     return INITIAL_EXERCISES;
   });
 
-  // Estado de Rutinas
+  // Estado de Rutinas (sin plantillas fijas de fábrica; si está vacío abre el generador inteligente)
   const [routines, setRoutines] = useState<Routine[]>(() => {
     const saved = localStorage.getItem('gimy360_routines');
-    return saved ? JSON.parse(saved) : INITIAL_ROUTINES;
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   // Historial de Entrenamientos Completados (100% datos reales, sin mock data)
@@ -1560,6 +1625,8 @@ export default function App() {
         return {
           unit: parsed.unit || 'kg',
           defaultRestTime: parsed.defaultRestTime || 90,
+          autoStartRestTimer: parsed.autoStartRestTimer ?? true,
+          userBodyweight: parsed.userBodyweight ?? 75,
           soundEnabled: parsed.soundEnabled ?? true,
           vibrateEnabled: parsed.vibrateEnabled ?? true,
           theme: parsed.theme || 'dark',
@@ -1572,6 +1639,8 @@ export default function App() {
     return {
       unit: 'kg',
       defaultRestTime: 90,
+      autoStartRestTimer: true,
+      userBodyweight: 75,
       soundEnabled: true,
       vibrateEnabled: true,
       theme: 'dark',
@@ -1701,6 +1770,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('gimy360_routines', JSON.stringify(routines));
   }, [routines]);
+
+  // Abrir el asistente de rutinas automáticamente si la app se abre sin ninguna rutina
+  useEffect(() => {
+    if (routines.length === 0 && !activeWorkout) {
+      setWizardStep(1);
+      setShowWizardModal(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('gimy360_history', JSON.stringify(history));
@@ -1840,7 +1918,10 @@ export default function App() {
 
   // Iniciar entrenamiento desde una rutina
   const handleStartRoutineWorkout = (routine: Routine) => {
+    const defaultBw = settings.userBodyweight ?? 75;
     const initialExercises: WorkoutExercise[] = routine.exerciseIds.map((exId, idx) => {
+      const exMeta = exercises.find((e) => e.id === exId);
+      const isBw = exMeta?.equipment === 'corporal';
       // Buscar datos de la última sesión para este ejercicio para precargar series de referencia
       const lastSessionSets = getPreviousExerciseSets(exId);
       const defaultSets: WorkoutSet[] =
@@ -1862,6 +1943,7 @@ export default function App() {
         id: `we-${idx}-${Date.now()}`,
         exerciseId: exId,
         sets: defaultSets,
+        ...(isBw ? { includeBodyweight: true, bodyweightKg: defaultBw } : {}),
       };
     });
 
@@ -1894,6 +1976,9 @@ export default function App() {
   // Añadir ejercicio al entreno activo (con solo 1 serie inicial)
   const handleAddExerciseToWorkout = (exerciseId: string) => {
     if (!activeWorkout) return;
+    const exMeta = exercises.find((e) => e.id === exerciseId);
+    const isBw = exMeta?.equipment === 'corporal';
+    const defaultBw = settings.userBodyweight ?? 75;
     const lastSessionSets = getPreviousExerciseSets(exerciseId);
     const initialSets: WorkoutSet[] =
       lastSessionSets.length > 0
@@ -1914,6 +1999,7 @@ export default function App() {
       id: `we-${Date.now()}`,
       exerciseId,
       sets: initialSets,
+      ...(isBw ? { includeBodyweight: true, bodyweightKg: defaultBw } : {}),
     };
 
     setActiveWorkout({
@@ -1986,11 +2072,15 @@ export default function App() {
     const updatedExercises = activeWorkout.exercises.map((e) => {
       if (e.id === workoutExId) {
         // Al marcarlo como finalizado, asegurarse de que las series se marquen completadas para el historial
+        const exInfo = exercises.find((ex) => ex.id === e.exerciseId);
+        const isBw = exInfo?.equipment === 'corporal';
+        const bwSnapshot = e.includeBodyweight === false ? 0 : (e.bodyweightKg ?? settings.userBodyweight ?? 75);
         const updatedSets = nextCompletedState
           ? e.sets.map((s) => ({
               ...s,
               completed: true,
               completedAt: s.completedAt || Date.now(),
+              ...(isBw && s.bodyweightKg === undefined ? { bodyweightKg: bwSnapshot } : {}),
             }))
           : e.sets;
 
@@ -2018,6 +2108,18 @@ export default function App() {
     }
   };
 
+  // Modificar metadatos de calistenia (peso corporal / lastre) en un ejercicio activo
+  const handleUpdateWorkoutExerciseBodyweight = (
+    exIndex: number,
+    updates: { includeBodyweight?: boolean; bodyweightKg?: number }
+  ) => {
+    if (!activeWorkout) return;
+    const updatedExercises = [...activeWorkout.exercises];
+    const target = { ...updatedExercises[exIndex], ...updates };
+    updatedExercises[exIndex] = target;
+    setActiveWorkout({ ...activeWorkout, exercises: updatedExercises });
+  };
+
   // Modificar serie en entreno activo
   const handleUpdateSet = (
     exIndex: number,
@@ -2031,10 +2133,19 @@ export default function App() {
     const updatedSets = [...targetExercise.sets];
     const targetSet = { ...updatedSets[setIndex], [field]: value };
 
-    // Si se marca como completada y antes no lo estaba -> disparar temporizador de descanso
+    // Si se marca como completada y antes no lo estaba -> guardar snapshot de peso corporal (calistenia) y disparar descanso
     if (field === 'completed' && value === true && !updatedSets[setIndex].completed) {
       targetSet.completedAt = Date.now();
-      startRestTimer(settings.defaultRestTime);
+      const exInfo = exercises.find((e) => e.id === targetExercise.exerciseId);
+      if (exInfo?.equipment === 'corporal') {
+        targetSet.bodyweightKg =
+          targetExercise.includeBodyweight === false
+            ? 0
+            : (targetExercise.bodyweightKg ?? settings.userBodyweight ?? 75);
+      }
+      if (settings.autoStartRestTimer !== false) {
+        startRestTimer(settings.defaultRestTime);
+      }
     }
 
     updatedSets[setIndex] = targetSet;
@@ -2112,10 +2223,15 @@ export default function App() {
       };
     });
 
+    const newExInfo = exercises.find((ex) => ex.id === newExerciseId);
+    const isNewBw = newExInfo?.equipment === 'corporal';
+
     updated[workoutExIndex] = {
       ...target,
       exerciseId: newExerciseId,
       sets: updatedSets,
+      includeBodyweight: isNewBw ? (target.includeBodyweight ?? true) : undefined,
+      bodyweightKg: isNewBw ? (target.bodyweightKg ?? settings.userBodyweight ?? 75) : undefined,
     };
 
     setActiveWorkout({
@@ -2239,10 +2355,11 @@ export default function App() {
         exercises,
         settings.unit,
         instagramTheme,
-        lang
+        lang,
+        settings.userBodyweight ?? 75
       );
     }
-  }, [instagramShareSession, instagramTheme, exercises, settings.unit, lang]);
+  }, [instagramShareSession, instagramTheme, exercises, settings.unit, settings.userBodyweight, lang]);
 
   const handleShareToInstagram = async () => {
     if (!instagramCanvasRef.current || !instagramShareSession) return;
@@ -2259,7 +2376,13 @@ export default function App() {
         await navigator.share({
           files: [file],
           title: `Gimy360 - ${instagramShareSession.title}`,
-          text: getInstagramCaptionText(instagramShareSession, settings.unit, lang),
+          text: getInstagramCaptionText(
+            instagramShareSession,
+            settings.unit,
+            lang,
+            exercises,
+            settings.userBodyweight ?? 75
+          ),
         });
         setShareSuccessToast(
           lang === 'en'
@@ -2272,7 +2395,15 @@ export default function App() {
 
       // Si el navegador no permite compartir archivos directamente (ej: escritorio)
       handleDownloadStoryImage();
-      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit, lang));
+      await navigator.clipboard.writeText(
+        getInstagramCaptionText(
+          instagramShareSession,
+          settings.unit,
+          lang,
+          exercises,
+          settings.userBodyweight ?? 75
+        )
+      );
       setCopyCaptionSuccess(true);
       setShareSuccessToast(
         lang === 'en'
@@ -2311,7 +2442,15 @@ export default function App() {
   const handleCopyInstagramCaption = async () => {
     if (!instagramShareSession) return;
     try {
-      await navigator.clipboard.writeText(getInstagramCaptionText(instagramShareSession, settings.unit, lang));
+      await navigator.clipboard.writeText(
+        getInstagramCaptionText(
+          instagramShareSession,
+          settings.unit,
+          lang,
+          exercises,
+          settings.userBodyweight ?? 75
+        )
+      );
       setCopyCaptionSuccess(true);
       setTimeout(() => setCopyCaptionSuccess(false), 3000);
     } catch (err) {
@@ -2496,14 +2635,15 @@ export default function App() {
      CÁLCULO DE VOLUMEN Y RÉCORDS PERSONALES (PRs)
      ========================================================================== */
 
-  // Calcular métricas de una sesión
+  // Calcular métricas de una sesión (considerando lastre + peso corporal en calistenia)
   const getSessionMetrics = (session: WorkoutSession) => {
     let totalVolume = 0;
     let totalSets = 0;
+    const defaultBw = settings.userBodyweight ?? 75;
     session.exercises.forEach((ex) => {
       ex.sets.forEach((set) => {
         if (set.completed) {
-          totalVolume += set.weight * set.reps;
+          totalVolume += getEffectiveSetWeight(set, ex, exercises, defaultBw) * set.reps;
           totalSets += 1;
         }
       });
@@ -2562,6 +2702,7 @@ export default function App() {
 
     let maxAllTime1RM = 0;
     let maxAllTimeWeight = 0;
+    const defaultBw = settings.userBodyweight ?? 75;
 
     sortedHistory.forEach((session) => {
       const match = session.exercises.find((e) => e.exerciseId === selectedHistoryExerciseId);
@@ -2572,12 +2713,13 @@ export default function App() {
         let sessionVolume = 0;
 
         match.sets.forEach((s) => {
-          if (s.completed && s.weight > 0) {
-            const oneRM = calculate1RM(s.weight, s.reps);
-            sessionVolume += s.weight * s.reps;
+          const effWeight = getEffectiveSetWeight(s, match, exercises, defaultBw);
+          if (s.completed && effWeight > 0) {
+            const oneRM = calculate1RM(effWeight, s.reps);
+            sessionVolume += effWeight * s.reps;
             if (oneRM > best1RMInSession) {
               best1RMInSession = oneRM;
-              bestWeightInSession = s.weight;
+              bestWeightInSession = effWeight;
               bestRepsInSession = s.reps;
             }
           }
@@ -2698,7 +2840,7 @@ export default function App() {
         if (json.exercises && json.history) {
           if (window.confirm('¿Restaurar copia de seguridad? Esto reemplazará tus datos actuales.')) {
             setExercises(json.exercises);
-            setRoutines(json.routines || INITIAL_ROUTINES);
+            setRoutines(json.routines || []);
             setHistory(json.history || []);
             if (json.settings) setSettings(json.settings);
             alert('¡Copia de seguridad restaurada con éxito!');
@@ -2729,7 +2871,7 @@ export default function App() {
     <div
       data-theme={settings.theme || 'dark'}
       className={`min-h-screen ${
-        settings.theme === 'light' ? 'theme-light bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'
+        settings.theme === 'light' ? 'theme-light bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
       } flex flex-col font-sans select-none antialiased`}
     >
       {/* ==========================================================================
@@ -3368,8 +3510,17 @@ export default function App() {
                       </h2>
                     </div>
 
-                    {/* Cronómetro grande */}
-                    <div className="flex items-center gap-2">
+                    {/* Cronómetro grande y botón de descanso manual */}
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startRestTimer(settings.defaultRestTime)}
+                        className="flex items-center gap-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 px-2.5 py-1.5 rounded-xl font-bold text-xs active:scale-95 transition"
+                        title={`${t.startRestBtn} (${settings.defaultRestTime}s)`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span className="hidden xs:inline">{settings.defaultRestTime}s</span>
+                      </button>
                       <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-emerald-400 font-mono-numbers font-extrabold text-sm sm:text-base">
                         <Clock className="w-4 h-4 text-emerald-400 animate-spin-slow" />
                         <span>{formatTime(elapsedWorkoutSeconds)}</span>
@@ -3418,6 +3569,17 @@ export default function App() {
                     const totalSetsCount = workoutEx.sets.length;
                     const isAllCompleted = totalSetsCount > 0 && completedSetsCount === totalSetsCount;
                     const lastCompletedSet = [...workoutEx.sets].reverse().find((s) => s.completed);
+                    const isBodyweightEx = exerciseInfo?.equipment === 'corporal';
+                    const includeBw = workoutEx.includeBodyweight !== false;
+                    const exBodyweight = workoutEx.bodyweightKg ?? settings.userBodyweight ?? 75;
+                    const feedback = getProgressiveOverloadFeedback(
+                      workoutEx.exerciseId,
+                      history,
+                      settings.unit,
+                      lang,
+                      exercises,
+                      settings.userBodyweight ?? 75
+                    );
 
                     return (
                       <div
@@ -3480,7 +3642,7 @@ export default function App() {
                             </div>
 
                             {/* Acciones y Estado */}
-                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                               {/* Badge de Progreso de Series */}
                               <span
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
@@ -3500,18 +3662,18 @@ export default function App() {
                                 )}
                               </span>
 
-                              {/* Botón Sustituir Ejercicio (Máquina Ocupada) */}
+                              {/* Botón Directo Sustituir en 1 Toque (Exercise Swap) */}
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleOpenSubstituteModal(exIdx);
                                 }}
-                                className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-lg active:scale-90 transition hover:bg-cyan-500/10 flex items-center gap-1 border border-transparent hover:border-cyan-500/30"
-                                title={lang === 'en' ? 'Swap for equivalent alternative if equipment is busy' : 'Sustituir por alternativa si la máquina está ocupada'}
+                                className="text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded-lg active:scale-90 transition bg-cyan-500/10 hover:bg-cyan-500/20 flex items-center gap-1 border border-cyan-500/30"
+                                title={lang === 'en' ? 'Swap for compatible alternative' : 'Sustituir por alternativa compatible'}
                               >
-                                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                                <span className="hidden sm:inline text-[10px] font-bold text-cyan-400">{t.swapExerciseBtn}</span>
+                                <RefreshCw className="w-3 h-3 text-cyan-400" />
+                                <span className="text-[10px] font-bold">{t.swapExerciseBtn}</span>
                               </button>
 
                               {/* Botón Confirmar Fin de Ejercicio */}
@@ -3562,96 +3724,161 @@ export default function App() {
                               </div>
                             </div>
                           </div>
+
+                          {/* INSIGNIA DESTACADA DE SOBRECARGA PROGRESIVA (visible incluso colapsado) */}
+                          {feedback.shouldIncrease && !workoutEx.isCompleted && (
+                            <div className="pt-0.5">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-400/60 shadow-[0_0_12px_rgba(16,185,129,0.22)]">
+                                <span>{feedback.badgeText}</span>
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Vista Resumida cuando está colapsado */}
                         {!isExpanded && lastCompletedSet && (
                           <div
                             onClick={() => toggleExerciseExpand(workoutEx.id)}
-                            className="px-3.5 pb-2.5 pt-0 text-[11px] text-slate-400 flex items-center justify-between cursor-pointer border-t border-slate-800/40 bg-slate-950/30"
+                            className="px-3.5 pb-2.5 pt-1 text-[11px] text-slate-400 flex items-center justify-between cursor-pointer border-t border-slate-800/40 bg-slate-950/30"
                           >
                             <span className="truncate">
-                              Última serie:{' '}
+                              {lang === 'en' ? 'Last set:' : 'Última serie:'}{' '}
                               <strong className="text-slate-200 font-mono-numbers">
-                                {lastCompletedSet.weight} {settings.unit} × {lastCompletedSet.reps} reps
+                                {isBodyweightEx
+                                  ? `${includeBw ? `${exBodyweight}${lastCompletedSet.weight > 0 ? `+${lastCompletedSet.weight}` : ''}` : `+${lastCompletedSet.weight}`} ${settings.unit}`
+                                  : `${lastCompletedSet.weight} ${settings.unit}`}{' '}
+                                × {lastCompletedSet.reps} {t.reps}
+                                {lastCompletedSet.rir !== undefined ? ` · RIR ${lastCompletedSet.rir >= 3 ? '3+' : lastCompletedSet.rir}` : ''}
                               </strong>
                             </span>
-                            <span className="text-[10px] text-emerald-400 font-semibold hover:underline">
-                              Toca para abrir
+                            <span className="text-[10px] text-emerald-400 font-semibold hover:underline shrink-0 ml-2">
+                              {lang === 'en' ? 'Tap to expand' : 'Toca para abrir'}
                             </span>
                           </div>
                         )}
 
-                        {/* Contenido Expandido: Cabecera de Series, Filas y Botón Añadir */}
+                        {/* Contenido Expandido: Guía Sobrecarga, Calistenia, Series + RIR */}
                         {isExpanded && (
-                          <div className="p-3.5 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
+                          <div className="p-3 sm:p-4 pt-2 border-t border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
                             {/* Banner de Sobrecarga Progresiva */}
-                            {(() => {
-                              const feedback = getProgressiveOverloadFeedback(workoutEx.exerciseId, history, settings.unit, lang);
-                              return (
-                                <div
-                                  className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
-                                    feedback.shouldIncrease
-                                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                                      : feedback.hasHistory
-                                      ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
-                                      : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                            <div
+                              className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
+                                feedback.shouldIncrease
+                                  ? 'bg-emerald-950/40 border-emerald-400/50 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.12)]'
+                                  : feedback.hasHistory
+                                  ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
+                                  : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Lightbulb
+                                  className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                    feedback.shouldIncrease ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'
                                   }`}
-                                >
-                                  <div className="flex items-start gap-2 min-w-0">
-                                    <Lightbulb
-                                      className={`w-4 h-4 shrink-0 mt-0.5 ${
-                                        feedback.shouldIncrease ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'
-                                      }`}
-                                    />
-                                    <div className="min-w-0">
-                                      <span className="font-extrabold block text-[10px] uppercase tracking-wider mb-0.5">
-                                        {feedback.shouldIncrease ? '⚡ Sobrecarga Progresiva Sugerida' : '🎯 Guía de Sesión'}
-                                      </span>
-                                      <p className="text-[11px] leading-relaxed opacity-95">{feedback.message}</p>
-                                    </div>
-                                  </div>
+                                />
+                                <div className="min-w-0">
+                                  <span className="font-extrabold block text-[10px] uppercase tracking-wider mb-0.5">
+                                    {feedback.shouldIncrease
+                                      ? (lang === 'en' ? '⚡ Progressive Overload Ready' : '⚡ Sobrecarga Progresiva Sugerida')
+                                      : (lang === 'en' ? '🎯 Session Guide' : '🎯 Guía de Sesión')}
+                                  </span>
+                                  <p className="text-[11px] leading-relaxed opacity-95">{feedback.message}</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSubstituteModal(exIdx)}
+                                className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition"
+                                title={lang === 'en' ? 'Equipment busy: swap exercise' : 'Máquina ocupada: sustituir ejercicio'}
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>{t.swapExerciseBtn}</span>
+                              </button>
+                            </div>
+
+                            {/* Barra de Configuración Calistenia (Peso Corporal + Lastre) */}
+                            {isBodyweightEx && (
+                              <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/25 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded-md text-[10px]">
+                                    {t.calisthenicsBadge}
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleOpenSubstituteModal(exIdx)}
-                                    className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition"
-                                    title="Máquina ocupada: cambiar ejercicio"
+                                    onClick={() =>
+                                      handleUpdateWorkoutExerciseBodyweight(exIdx, {
+                                        includeBodyweight: !includeBw,
+                                      })
+                                    }
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition active:scale-95 ${
+                                      includeBw
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                        : 'bg-slate-900 text-slate-400 border-slate-700'
+                                    }`}
                                   >
-                                    <RefreshCw className="w-3 h-3" />
-                                    <span>Cambiar</span>
+                                    {includeBw ? t.includeBodyweightLabel : t.addedLoadOnlyLabel}
                                   </button>
                                 </div>
-                              );
-                            })()}
 
-                            {/* Cabecera de Columnas de Series */}
-                            <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-1 text-center">
-                              <span className="col-span-2 text-left">{t.setColHeader}</span>
-                              <span className="col-span-3">{t.prevColHeader}</span>
-                              <span className="col-span-3">{settings.unit.toUpperCase()}</span>
-                              <span className="col-span-2">{t.repsColHeader}</span>
-                              <span className="col-span-2">{t.doneColHeader}</span>
+                                {includeBw && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-400 font-bold">{t.bodyweightInputLabel}:</span>
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      min="0"
+                                      value={exBodyweight}
+                                      onChange={(e) =>
+                                        handleUpdateWorkoutExerciseBodyweight(exIdx, {
+                                          bodyweightKg: Math.max(0, parseFloat(e.target.value) || 0),
+                                        })
+                                      }
+                                      className="w-16 text-center bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg py-1 text-xs font-black font-mono-numbers text-white focus:outline-none"
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{settings.unit}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Cabecera de Columnas de Series (6 Columnas: SET, PREV, KG/+KG, REPS, RIR, OK) */}
+                            <div className="grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-1 mb-0.5 text-center items-center">
+                              <span className="text-left">{t.setColHeader}</span>
+                              <span>{t.prevColHeader}</span>
+                              <span>{isBodyweightEx ? t.addedLoadColHeader(settings.unit) : settings.unit.toUpperCase()}</span>
+                              <span>{t.repsColHeader}</span>
+                              <span>{t.rirColHeader}</span>
+                              <span>{t.doneColHeader}</span>
                             </div>
 
                             {/* Filas de Series */}
                             <div className="space-y-1.5">
                               {workoutEx.sets.map((set, setIdx) => {
                                 const prevSet = previousSets[setIdx] || previousSets[previousSets.length - 1];
-                                const ghostText = prevSet ? `${prevSet.weight}kg × ${prevSet.reps}` : '—';
-                                const est1RM = calculate1RM(set.weight, set.reps);
+                                const ghostText = prevSet
+                                  ? `${isBodyweightEx && prevSet.weight > 0 ? `+${prevSet.weight}` : prevSet.weight}×${prevSet.reps}`
+                                  : '—';
+                                const effectiveWeight = getEffectiveSetWeight(
+                                  set,
+                                  workoutEx,
+                                  exercises,
+                                  settings.userBodyweight ?? 75
+                                );
+                                const est1RM = calculate1RM(effectiveWeight, set.reps);
 
                                 return (
                                   <div
                                     key={set.id}
-                                    className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-1.5 rounded-xl transition-all ${
+                                    className={`grid grid-cols-[30px_minmax(42px,1fr)_minmax(50px,1.05fr)_minmax(42px,0.85fr)_minmax(44px,0.85fr)_50px] gap-1 sm:gap-1.5 items-center p-1.5 rounded-xl transition-all ${
                                       set.completed
                                         ? 'bg-emerald-950/20 border border-emerald-500/30'
                                         : 'bg-slate-950/70 border border-slate-800/60'
                                     }`}
                                   >
                                     {/* Tipo / Número de Serie */}
-                                    <div className="col-span-2 flex items-center gap-1">
+                                    <div className="flex flex-col items-center justify-center">
                                       <button
+                                        type="button"
                                         onClick={() => {
                                           const types: SetType[] = ['N', 'W', 'F', 'D'];
                                           const nextType = types[(types.indexOf(set.type) + 1) % types.length];
@@ -3680,7 +3907,7 @@ export default function App() {
                                       </button>
                                       {set.completed && est1RM > 0 && (
                                         <span
-                                          className="hidden sm:inline text-[9px] font-bold text-slate-500"
+                                          className="hidden sm:inline text-[8px] font-bold text-slate-500 mt-0.5"
                                           title="1RM Estimada (Epley)"
                                         >
                                           {est1RM}
@@ -3688,19 +3915,19 @@ export default function App() {
                                       )}
                                     </div>
 
-                                    {/* Placeholder / Ghost Data previo */}
-                                    <div className="col-span-3 text-center text-xs font-mono-numbers text-slate-500 truncate select-text">
+                                    {/* Ghost Data previo */}
+                                    <div className="text-center text-[11px] font-mono-numbers text-slate-500 truncate select-text">
                                       {ghostText}
                                     </div>
 
-                                    {/* Input Peso (kg) con botones de ajuste rápido */}
-                                    <div className="col-span-3 flex items-center justify-center">
+                                    {/* Input Peso o Lastre (+kg) */}
+                                    <div className="flex items-center justify-center">
                                       <input
                                         type="number"
                                         step="0.5"
                                         min="0"
                                         value={set.weight === 0 ? '' : set.weight}
-                                        placeholder="0"
+                                        placeholder={isBodyweightEx ? '+0' : '0'}
                                         onChange={(e) =>
                                           handleUpdateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)
                                         }
@@ -3709,7 +3936,7 @@ export default function App() {
                                     </div>
 
                                     {/* Input Repeticiones */}
-                                    <div className="col-span-2 flex items-center justify-center">
+                                    <div className="flex items-center justify-center">
                                       <input
                                         type="number"
                                         step="1"
@@ -3723,11 +3950,40 @@ export default function App() {
                                       />
                                     </div>
 
-                                    {/* Casilla de Verificación Táctil Grande */}
-                                    <div className="col-span-2 flex items-center justify-center gap-1">
+                                    {/* Selector Opcional RIR (0, 1, 2, 3+) */}
+                                    <div className="flex items-center justify-center">
+                                      <select
+                                        aria-label={t.rirColHeader}
+                                        value={set.rir === undefined ? '' : String(set.rir)}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          handleUpdateSet(
+                                            exIdx,
+                                            setIdx,
+                                            'rir',
+                                            val === '' ? undefined : parseInt(val, 10)
+                                          );
+                                        }}
+                                        className={`w-full text-center bg-slate-900 border focus:border-emerald-500 rounded-lg py-1.5 px-0.5 text-xs font-black font-mono-numbers focus:outline-none cursor-pointer ${
+                                          set.rir !== undefined
+                                            ? 'border-cyan-500/50 text-cyan-300'
+                                            : 'border-slate-700 text-slate-400'
+                                        }`}
+                                      >
+                                        <option value="">—</option>
+                                        <option value="0">0</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3+</option>
+                                      </select>
+                                    </div>
+
+                                    {/* Casilla de Verificación Táctil + Quitar Serie */}
+                                    <div className="flex items-center justify-center gap-0.5">
                                       <button
+                                        type="button"
                                         onClick={() => handleUpdateSet(exIdx, setIdx, 'completed', !set.completed)}
-                                        className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
+                                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-bold transition-all active:scale-90 shadow-sm ${
                                           set.completed
                                             ? 'bg-emerald-500 text-slate-950 shadow-emerald-500/30 font-black'
                                             : 'bg-slate-800 text-slate-500 hover:text-slate-300 border border-slate-700'
@@ -3736,9 +3992,10 @@ export default function App() {
                                         <Check className={`w-4 h-4 ${set.completed ? 'stroke-[3]' : ''}`} />
                                       </button>
                                       <button
+                                        type="button"
                                         onClick={() => handleRemoveSet(exIdx, setIdx)}
-                                        className="text-slate-600 hover:text-rose-400 p-1 rounded transition text-xs"
-                                        title="Quitar serie"
+                                        className="text-slate-600 hover:text-rose-400 p-0.5 rounded transition text-xs"
+                                        title={lang === 'en' ? 'Remove set' : 'Quitar serie'}
                                       >
                                         <X className="w-3 h-3" />
                                       </button>
@@ -4188,17 +4445,36 @@ export default function App() {
                               {session.exercises.map((we, i) => {
                                 const exInfo = exercises.find((e) => e.id === we.exerciseId);
                                 const completedSets = we.sets.filter((s) => s.completed);
+                                const isBw = exInfo?.equipment === 'corporal';
+                                const maxEffective = Math.max(
+                                  ...completedSets.map((s) =>
+                                    getEffectiveSetWeight(s, we, exercises, settings.userBodyweight ?? 75)
+                                  ),
+                                  0
+                                );
+                                const maxAdded = Math.max(...completedSets.map((s) => s.weight), 0);
+                                const rirValues = completedSets.map((s) => s.rir).filter((r): r is number => r !== undefined);
+                                const avgRir =
+                                  rirValues.length > 0
+                                    ? Math.round(rirValues.reduce((a, b) => a + b, 0) / rirValues.length)
+                                    : undefined;
+
                                 return (
-                                  <div key={i} className="py-1.5 flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-300">
+                                  <div key={i} className="py-1.5 flex items-center justify-between text-xs gap-2">
+                                    <span className="font-bold text-slate-300 truncate">
                                       {exInfo ? getExerciseName(exInfo, lang) : (lang === 'en' ? 'Exercise' : 'Ejercicio')}
                                     </span>
-                                    <div className="flex items-center gap-2 text-slate-400 font-mono-numbers text-[11px]">
+                                    <div className="flex items-center gap-2 text-slate-400 font-mono-numbers text-[11px] shrink-0">
                                       <span>{completedSets.length} {t.sets}</span>
+                                      {avgRir !== undefined && (
+                                        <span className="text-cyan-400 text-[10px] font-bold bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.2 rounded">
+                                          RIR {avgRir >= 3 ? '3+' : avgRir}
+                                        </span>
+                                      )}
                                       <span className="text-emerald-400 font-bold">
-                                        Max:{' '}
-                                        {Math.max(...completedSets.map((s) => s.weight), 0)}
-                                        {settings.unit}
+                                        {isBw && maxAdded > 0
+                                          ? `+${maxAdded}${settings.unit} (${maxEffective}${settings.unit})`
+                                          : `Max: ${maxEffective}${settings.unit}`}
                                       </span>
                                     </div>
                                   </div>
@@ -4338,7 +4614,7 @@ export default function App() {
                               y1={padding}
                               x2={width - padding}
                               y2={padding}
-                              stroke="#1e293b"
+                              stroke={settings.theme === 'light' ? '#e2e8f0' : '#1e293b'}
                               strokeDasharray="4 4"
                             />
                             <line
@@ -4346,7 +4622,7 @@ export default function App() {
                               y1={height / 2}
                               x2={width - padding}
                               y2={height / 2}
-                              stroke="#1e293b"
+                              stroke={settings.theme === 'light' ? '#e2e8f0' : '#1e293b'}
                               strokeDasharray="4 4"
                             />
                             <line
@@ -4354,7 +4630,7 @@ export default function App() {
                               y1={height - padding}
                               x2={width - padding}
                               y2={height - padding}
-                              stroke="#1e293b"
+                              stroke={settings.theme === 'light' ? '#cbd5e1' : '#1e293b'}
                             />
 
                             {/* Área bajo la curva */}
@@ -4383,11 +4659,18 @@ export default function App() {
                               const cy = getY(p.best1RM);
                               return (
                                 <g key={i}>
-                                  <circle cx={cx} cy={cy} r="6" fill="#0f172a" stroke="#22c55e" strokeWidth="3" />
+                                  <circle
+                                    cx={cx}
+                                    cy={cy}
+                                    r="6"
+                                    fill={settings.theme === 'light' ? '#ffffff' : '#0f172a'}
+                                    stroke="#22c55e"
+                                    strokeWidth="3"
+                                  />
                                   <text
                                     x={cx}
                                     y={cy - 10}
-                                    fill="#f8fafc"
+                                    fill={settings.theme === 'light' ? '#0f172a' : '#f8fafc'}
                                     fontSize="11"
                                     fontWeight="bold"
                                     textAnchor="middle"
@@ -4598,23 +4881,217 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Tiempo de descanso por defecto */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                <div>
-                  <span className="text-sm font-extrabold text-white block">{t.restTimerTitle}</span>
-                  <span className="text-xs text-slate-500">{t.restTimerSub}</span>
+              {/* Peso Corporal para Calistenia */}
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <div className="min-w-0">
+                  <span className="text-sm font-extrabold text-white block">{t.bodyweightSettingTitle}</span>
+                  <span className="text-xs text-slate-500">{t.bodyweightSettingSub}</span>
                 </div>
-                <select
-                  value={settings.defaultRestTime}
-                  onChange={(e) => setSettings({ ...settings, defaultRestTime: parseInt(e.target.value) })}
-                  className="bg-slate-950 border border-slate-800 text-white text-xs font-bold rounded-xl px-3 py-2 focus:outline-none"
-                >
-                  <option value={45}>45 {t.seconds}</option>
-                  <option value={60}>60 {t.seconds}</option>
-                  <option value={90}>90 {t.seconds} ({lang === 'en' ? 'Recommended' : 'Recomendado'})</option>
-                  <option value={120}>120 {t.seconds} ({lang === 'en' ? 'Strength' : 'Fuerza'})</option>
-                  <option value={180}>180 {t.seconds} ({lang === 'en' ? 'Heavy' : 'Pesado'})</option>
-                </select>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        userBodyweight: Math.max(30, (settings.userBodyweight ?? 75) - 1),
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/40 font-black text-xs active:scale-95 transition"
+                  >
+                    -1
+                  </button>
+                  <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-2 py-1">
+                    <input
+                      type="number"
+                      min="20"
+                      max="250"
+                      step="0.5"
+                      value={settings.userBodyweight ?? 75}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          userBodyweight: Math.max(20, Math.min(250, parseFloat(e.target.value) || 75)),
+                        })
+                      }
+                      className="w-12 text-center bg-transparent text-xs sm:text-sm font-black font-mono-numbers text-emerald-400 focus:outline-none"
+                    />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">{settings.unit}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        userBodyweight: Math.min(250, (settings.userBodyweight ?? 75) + 1),
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/40 font-black text-xs active:scale-95 transition"
+                  >
+                    +1
+                  </button>
+                </div>
+              </div>
+
+              {/* Tiempo de descanso configurable */}
+              <div className="pt-3 border-t border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-extrabold text-white block">{t.restTimerTitle}</span>
+                      <span className="text-xs text-slate-500">{t.restTimerSub}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1">
+                    <span className="font-mono-numbers text-sm font-black text-emerald-400 block leading-tight">
+                      {formatTime(settings.defaultRestTime)}
+                    </span>
+                    <span className="font-mono-numbers text-[10px] text-slate-500 font-bold">
+                      {settings.defaultRestTime} {t.seconds}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Controles Stepper y Campo Numérico Exacto */}
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        defaultRestTime: Math.max(10, prev.defaultRestTime - 15),
+                      }))
+                    }
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  >
+                    -15s
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        defaultRestTime: Math.max(10, prev.defaultRestTime - 5),
+                      }))
+                    }
+                    className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  >
+                    -5s
+                  </button>
+
+                  <div className="flex-1 flex items-center justify-center gap-1 min-w-0">
+                    <input
+                      type="number"
+                      min={10}
+                      max={600}
+                      step={5}
+                      value={settings.defaultRestTime}
+                      onChange={(e) => {
+                        const raw = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(raw)) {
+                          setSettings((prev) => ({
+                            ...prev,
+                            defaultRestTime: Math.min(600, Math.max(10, raw)),
+                          }));
+                        }
+                      }}
+                      className="w-16 text-center bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg py-1 text-xs font-black font-mono-numbers text-white focus:outline-none"
+                      aria-label={t.restTimerCustomLabel}
+                    />
+                    <span className="text-[11px] font-bold text-slate-400">s</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        defaultRestTime: Math.min(600, prev.defaultRestTime + 5),
+                      }))
+                    }
+                    className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  >
+                    +5s
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        defaultRestTime: Math.min(600, prev.defaultRestTime + 15),
+                      }))
+                    }
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs active:scale-95 transition"
+                  >
+                    +15s
+                  </button>
+                </div>
+
+                {/* Deslizador rápido (15s - 300s) */}
+                <input
+                  type="range"
+                  min={15}
+                  max={300}
+                  step={5}
+                  value={Math.min(300, Math.max(15, settings.defaultRestTime))}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      defaultRestTime: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  className="w-full accent-emerald-500 cursor-pointer h-1.5"
+                />
+
+                {/* Preajustes rápidos */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                    {t.restTimerPresetsLabel}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[30, 45, 60, 90, 120, 150, 180, 240].map((sec) => {
+                      const isSelected = settings.defaultRestTime === sec;
+                      return (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => setSettings((prev) => ({ ...prev, defaultRestTime: sec }))}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold font-mono-numbers border transition active:scale-95 ${
+                            isSelected
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm shadow-emerald-500/20'
+                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {sec >= 60 && sec % 60 === 0 ? `${sec / 60}m` : `${sec}s`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Inicio automático de descanso al marcar serie */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                  <div>
+                    <span className="text-xs font-extrabold text-white block">{t.restTimerAutoTitle}</span>
+                    <span className="text-[11px] text-slate-500">{t.restTimerAutoSub}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        autoStartRestTimer: prev.autoStartRestTimer === false,
+                      }))
+                    }
+                    className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
+                      settings.autoStartRestTimer !== false ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
+                  </button>
+                </div>
               </div>
 
               {/* Alerta Sonora del Temporizador */}
@@ -4636,8 +5113,38 @@ export default function App() {
                     setSettings({ ...settings, soundEnabled: next });
                     if (next) triggerAudioChime();
                   }}
-                  className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center ${
+                  className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
                     settings.soundEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
+                </button>
+              </div>
+
+              {/* Vibración Háptica */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Activity className={`w-4 h-4 ${settings.vibrateEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <div>
+                    <span className="text-sm font-extrabold text-white block">{t.vibrateTitle}</span>
+                    <span className="text-xs text-slate-500">{t.vibrateSub}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !settings.vibrateEnabled;
+                    setSettings({ ...settings, vibrateEnabled: next });
+                    if (next && 'vibrate' in navigator) {
+                      try {
+                        navigator.vibrate(120);
+                      } catch {
+                        // Ignore
+                      }
+                    }
+                  }}
+                  className={`w-12 h-6 rounded-full transition-colors p-0.5 flex items-center shrink-0 ${
+                    settings.vibrateEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
                   }`}
                 >
                   <span className="w-5 h-5 rounded-full bg-white shadow-sm block"></span>
@@ -4687,16 +5194,23 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
-                    if (window.confirm('¿Reiniciar rutinas y ejercicios a los valores iniciales predeterminados?')) {
+                    if (
+                      window.confirm(
+                        lang === 'en'
+                          ? 'Reset routines and open the Smart Routine Generator?'
+                          : '¿Reiniciar rutinas y abrir el Generador Inteligente de Rutinas?'
+                      )
+                    ) {
                       setExercises(INITIAL_EXERCISES);
-                      setRoutines(INITIAL_ROUTINES);
-                      alert('Datos iniciales restablecidos.');
+                      setRoutines([]);
+                      setWizardStep(1);
+                      setShowWizardModal(true);
                     }
                   }}
                   className="text-xs text-slate-400 hover:text-slate-300 hover:underline flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Restablecer rutinas y catálogo por defecto
+                  {lang === 'en' ? 'Reset catalog & regenerate routines' : 'Reiniciar catálogo y regenerar rutinas'}
                 </button>
               </div>
             </div>
@@ -4770,7 +5284,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Botones de Ajuste Rápido (-15s, +15s, presets) */}
+              {/* Botones de Ajuste Rápido (-15s, +15s, presets + tiempo configurado) */}
               <div className="flex items-center justify-between gap-1.5 pt-1">
                 <button
                   onClick={() => adjustRestTimer(-15)}
@@ -4778,24 +5292,22 @@ export default function App() {
                 >
                   -15s
                 </button>
-                <button
-                  onClick={() => startRestTimer(60)}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 active:scale-95 transition"
-                >
-                  60s
-                </button>
-                <button
-                  onClick={() => startRestTimer(90)}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 active:scale-95 transition"
-                >
-                  90s
-                </button>
-                <button
-                  onClick={() => startRestTimer(120)}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 active:scale-95 transition"
-                >
-                  120s
-                </button>
+                {Array.from(new Set([settings.defaultRestTime, 60, 90, 120]))
+                  .sort((a, b) => a - b)
+                  .slice(0, 3)
+                  .map((sec) => (
+                    <button
+                      key={sec}
+                      onClick={() => startRestTimer(sec)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition ${
+                        sec === settings.defaultRestTime
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                      }`}
+                    >
+                      {sec}s
+                    </button>
+                  ))}
                 <button
                   onClick={() => adjustRestTimer(15)}
                   className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 active:scale-95 transition"
@@ -5559,7 +6071,11 @@ export default function App() {
                   return isSameMuscle && isNotCurrent && notInWorkout && matchesSearch && matchesEq;
                 });
 
-                const sortedAlternatives = sortExercisesByTypeMaterialName(alternatives, lang);
+                const sortedAlternatives = sortExercisesByTypeMaterialName(alternatives, lang).sort((a, b) => {
+                  const aSameEq = a.equipment === currentEx.equipment ? 0 : 1;
+                  const bSameEq = b.equipment === currentEx.equipment ? 0 : 1;
+                  return aSameEq - bSameEq;
+                });
 
                 if (sortedAlternatives.length === 0) {
                   return (
@@ -5571,6 +6087,7 @@ export default function App() {
 
                 return sortedAlternatives.map((alt) => {
                   const badge = getEquipmentBadge(alt.equipment, lang);
+                  const isSimilarEquip = alt.equipment === currentEx.equipment;
                   const prevSets = getPreviousExerciseSets(alt.id);
                   const bestPrev = prevSets.length > 0 ? prevSets[0] : null;
 
@@ -5584,10 +6101,15 @@ export default function App() {
                         <span className="text-xs sm:text-sm font-bold text-white block group-hover:text-cyan-400 transition-colors leading-snug break-words">
                           {getExerciseName(alt, lang)}
                         </span>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
                             {badge.label}
                           </span>
+                          {isSimilarEquip && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                              {lang === 'en' ? 'Same equipment' : 'Mismo equipamiento'}
+                            </span>
+                          )}
                           {bestPrev ? (
                             <span className="text-[10px] text-emerald-400 font-mono-numbers">
                               {lang === 'en' ? 'Previous best:' : 'Marca previa:'} {bestPrev.weight} {settings.unit} × {bestPrev.reps}
