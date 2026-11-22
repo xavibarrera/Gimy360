@@ -3338,7 +3338,7 @@ export default function App() {
                     className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-3.5 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all text-sm uppercase tracking-wider"
                   >
                     <Play className="w-4 h-4 fill-current" />
-                    <span>{lang === 'en' ? '🚀 Start Free Workout' : '🚀 Iniciar Entreno Libre'}</span>
+                    <span>{lang === 'en' ? 'Start Free Workout' : 'Iniciar Entreno Libre'}</span>
                   </button>
                 </div>
               </div>
@@ -3443,7 +3443,7 @@ export default function App() {
                           className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700/80 active:scale-95 transition"
                         >
                           <Eye className="w-4 h-4 text-cyan-400" />
-                          <span>{lang === 'en' ? 'View Details' : 'Ver Detalle'}</span>
+                          <span>{lang === 'en' ? 'View' : 'Ver'}</span>
                         </button>
 
                         <button
@@ -4773,16 +4773,13 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.preferencesHeading}</h3>
 
-              {/* Selector de Idioma / Language (Español vs English UK) */}
+              {/* Selector de Idioma (Español vs English UK) */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-black text-sm">
                     <Globe className="w-4 h-4 text-indigo-400" />
                   </div>
-                  <div>
-                    <span className="text-sm font-extrabold text-white block">{t.languageTitle}</span>
-                    <span className="text-xs text-slate-500">{t.languageSub}</span>
-                  </div>
+                  <span className="text-sm font-extrabold text-white">{t.languageTitle}</span>
                 </div>
                 <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
                   <button
@@ -4820,12 +4817,7 @@ export default function App() {
                   ) : (
                     <Moon className="w-5 h-5 text-emerald-400" />
                   )}
-                  <div>
-                    <span className="text-sm font-extrabold text-white block">{t.themeTitle}</span>
-                    <span className="text-xs text-slate-500">
-                      {settings.theme === 'light' ? t.themeLightSub : t.themeDarkSub}
-                    </span>
-                  </div>
+                  <span className="text-sm font-extrabold text-white">{t.themeTitle}</span>
                 </div>
                 <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
                   <button
@@ -4857,10 +4849,7 @@ export default function App() {
 
               {/* Unidad de Carga */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                <div>
-                  <span className="text-sm font-extrabold text-white block">{t.weightUnitTitle}</span>
-                  <span className="text-xs text-slate-500">{t.weightUnitSub}</span>
-                </div>
+                <span className="text-sm font-extrabold text-white">{t.weightUnitTitle}</span>
                 <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
                   <button
                     onClick={() => setSettings({ ...settings, unit: 'kg' })}
@@ -4883,52 +4872,23 @@ export default function App() {
 
               {/* Peso Corporal para Calistenia */}
               <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                <div className="min-w-0">
-                  <span className="text-sm font-extrabold text-white block">{t.bodyweightSettingTitle}</span>
-                  <span className="text-xs text-slate-500">{t.bodyweightSettingSub}</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() =>
+                <span className="text-sm font-extrabold text-white">{t.bodyweightSettingTitle}</span>
+                <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min="20"
+                    max="250"
+                    step="0.5"
+                    value={settings.userBodyweight ?? 75}
+                    onChange={(e) =>
                       setSettings({
                         ...settings,
-                        userBodyweight: Math.max(30, (settings.userBodyweight ?? 75) - 1),
+                        userBodyweight: Math.max(20, Math.min(250, parseFloat(e.target.value) || 75)),
                       })
                     }
-                    className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/40 font-black text-xs active:scale-95 transition"
-                  >
-                    -1
-                  </button>
-                  <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-2 py-1">
-                    <input
-                      type="number"
-                      min="20"
-                      max="250"
-                      step="0.5"
-                      value={settings.userBodyweight ?? 75}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          userBodyweight: Math.max(20, Math.min(250, parseFloat(e.target.value) || 75)),
-                        })
-                      }
-                      className="w-12 text-center bg-transparent text-xs sm:text-sm font-black font-mono-numbers text-emerald-400 focus:outline-none"
-                    />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">{settings.unit}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSettings({
-                        ...settings,
-                        userBodyweight: Math.min(250, (settings.userBodyweight ?? 75) + 1),
-                      })
-                    }
-                    className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/40 font-black text-xs active:scale-95 transition"
-                  >
-                    +1
-                  </button>
+                    className="w-14 text-center bg-transparent text-xs sm:text-sm font-black font-mono-numbers text-emerald-400 focus:outline-none"
+                  />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">{settings.unit}</span>
                 </div>
               </div>
 
@@ -4939,10 +4899,7 @@ export default function App() {
                     <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
                       <Clock className="w-4 h-4" />
                     </div>
-                    <div>
-                      <span className="text-sm font-extrabold text-white block">{t.restTimerTitle}</span>
-                      <span className="text-xs text-slate-500">{t.restTimerSub}</span>
-                    </div>
+                    <span className="text-sm font-extrabold text-white">{t.restTimerTitle}</span>
                   </div>
                   <div className="text-right shrink-0 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1">
                     <span className="font-mono-numbers text-sm font-black text-emerald-400 block leading-tight">
@@ -5045,38 +5002,9 @@ export default function App() {
                   className="w-full accent-emerald-500 cursor-pointer h-1.5"
                 />
 
-                {/* Preajustes rápidos */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    {t.restTimerPresetsLabel}
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[30, 45, 60, 90, 120, 150, 180, 240].map((sec) => {
-                      const isSelected = settings.defaultRestTime === sec;
-                      return (
-                        <button
-                          key={sec}
-                          type="button"
-                          onClick={() => setSettings((prev) => ({ ...prev, defaultRestTime: sec }))}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold font-mono-numbers border transition active:scale-95 ${
-                            isSelected
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm shadow-emerald-500/20'
-                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
-                          }`}
-                        >
-                          {sec >= 60 && sec % 60 === 0 ? `${sec / 60}m` : `${sec}s`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Inicio automático de descanso al marcar serie */}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                  <div>
-                    <span className="text-xs font-extrabold text-white block">{t.restTimerAutoTitle}</span>
-                    <span className="text-[11px] text-slate-500">{t.restTimerAutoSub}</span>
-                  </div>
+                  <span className="text-xs font-extrabold text-white">{t.restTimerAutoTitle}</span>
                   <button
                     type="button"
                     onClick={() =>
@@ -5102,10 +5030,7 @@ export default function App() {
                   ) : (
                     <VolumeX className="w-4 h-4 text-slate-500" />
                   )}
-                  <div>
-                    <span className="text-sm font-extrabold text-white block">{t.soundTitle}</span>
-                    <span className="text-xs text-slate-500">{t.soundSub}</span>
-                  </div>
+                  <span className="text-sm font-extrabold text-white">{t.soundTitle}</span>
                 </div>
                 <button
                   onClick={() => {
@@ -5125,10 +5050,7 @@ export default function App() {
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2">
                   <Activity className={`w-4 h-4 ${settings.vibrateEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
-                  <div>
-                    <span className="text-sm font-extrabold text-white block">{t.vibrateTitle}</span>
-                    <span className="text-xs text-slate-500">{t.vibrateSub}</span>
-                  </div>
+                  <span className="text-sm font-extrabold text-white">{t.vibrateTitle}</span>
                 </div>
                 <button
                   type="button"
