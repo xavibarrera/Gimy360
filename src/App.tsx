@@ -1743,6 +1743,17 @@ export default function App() {
   const lang: Language = settings.language || 'es';
   const t = TRANSLATIONS[lang] || TRANSLATIONS.es;
 
+  // Estado temporal para editar libremente el peso corporal en Ajustes sin bloqueos al borrar
+  const [bodyweightInput, setBodyweightInput] = useState<string>(() =>
+    String(settings.userBodyweight ?? 75)
+  );
+
+  useEffect(() => {
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (activeEl?.dataset?.bodyweightInput === 'true') return;
+    setBodyweightInput(String(settings.userBodyweight ?? 75));
+  }, [settings.userBodyweight]);
+
   // Sesión de entrenamiento activa (si hay una en curso)
   const [activeWorkout, setActiveWorkout] = useState<{
     id: string;
@@ -4328,8 +4339,8 @@ export default function App() {
                             }}
                             className="p-3 sm:p-3.5 cursor-pointer hover:bg-slate-850/60 active:bg-slate-800/50 transition select-none space-y-2"
                           >
-                            {/* LÍNEA 1: Reservada para número/código de ejercicio y nombre (truncate sin saltar de línea) */}
-                            <div className="flex items-center gap-2.5 min-w-0">
+                            {/* LÍNEA 1: Número/código, nombre del ejercicio y botón desplegar/plegar a la derecha */}
+                            <div className="flex items-center gap-2 min-w-0">
                               {isLinkingWorkoutSuperset ? (
                                 <span
                                   className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border transition ${
@@ -4373,9 +4384,33 @@ export default function App() {
                                   <span className="hidden xs:inline">{t.exerciseFinishedBadge}</span>
                                 </span>
                               )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isLinkingWorkoutSuperset) {
+                                    handleToggleWorkoutSupersetSelect(workoutEx.id);
+                                  } else {
+                                    toggleExerciseExpand(workoutEx.id);
+                                  }
+                                }}
+                                aria-expanded={isExpanded}
+                                aria-label={
+                                  isExpanded
+                                    ? (lang === 'en' ? 'Collapse exercise' : 'Plegar ejercicio')
+                                    : (lang === 'en' ? 'Expand exercise' : 'Desplegar ejercicio')
+                                }
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 active:scale-90 transition shrink-0"
+                              >
+                                <ChevronDown
+                                  className={`w-4 h-4 transition-transform duration-200 ${
+                                    isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                  }`}
+                                />
+                              </button>
                             </div>
 
-                            {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y acciones a la derecha */}
+                            {/* LÍNEA 2: Etiquetas de material/músculo a la izquierda y progreso/eliminar a la derecha */}
                             <div className="flex items-center justify-between gap-2 pt-0.5">
                               {/* Material y Grupo Muscular */}
                               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -4394,7 +4429,7 @@ export default function App() {
                               </div>
 
                               {/* Acciones y Estado */}
-                              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 {/* Badge de Progreso de Series */}
                                 <span
                                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 font-mono-numbers transition ${
@@ -4414,44 +4449,6 @@ export default function App() {
                                   )}
                                 </span>
 
-                                {/* Botón Directo Sustituir en 1 Toque (Exercise Swap) */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenSubstituteModal(exIdx);
-                                  }}
-                                  className="text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded-lg active:scale-90 transition bg-cyan-500/10 hover:bg-cyan-500/20 flex items-center gap-1 border border-cyan-500/30"
-                                  title={lang === 'en' ? 'Swap for compatible alternative' : 'Sustituir por alternativa compatible'}
-                                >
-                                  <RefreshCw className="w-3 h-3 text-cyan-400" />
-                                  <span className="text-[10px] font-bold">{t.swapExerciseBtn}</span>
-                                </button>
-
-                                {/* Botón Confirmar Fin de Ejercicio */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleExerciseFinished(workoutEx.id);
-                                  }}
-                                  className={`p-1.5 px-2 rounded-lg text-[10px] font-black flex items-center gap-1 active:scale-95 transition border ${
-                                    workoutEx.isCompleted
-                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
-                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
-                                  }`}
-                                  title={
-                                    workoutEx.isCompleted
-                                      ? (lang === 'en' ? 'Click to reopen exercise' : 'Clic para reabrir ejercicio')
-                                      : (lang === 'en' ? 'Confirm exercise finished' : 'Confirmar que el ejercicio se ha acabado')
-                                  }
-                                >
-                                  <CheckCircle2 className={`w-3.5 h-3.5 ${workoutEx.isCompleted ? 'fill-emerald-400/30' : ''}`} />
-                                  <span className="hidden sm:inline">
-                                    {workoutEx.isCompleted ? t.reopenExerciseBtn : t.finishExerciseBtn}
-                                  </span>
-                                </button>
-
                                 {/* Botón Eliminar Ejercicio (abre modal de confirmación) */}
                                 <button
                                   type="button"
@@ -4465,15 +4462,6 @@ export default function App() {
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-
-                                {/* Flecha Chevron Giratoria */}
-                                <div className="p-0.5 text-slate-400">
-                                  <ChevronDown
-                                    className={`w-4 h-4 transition-transform duration-200 ${
-                                      isExpanded ? 'rotate-180 text-emerald-400' : 'text-slate-400'
-                                    }`}
-                                  />
-                                </div>
                               </div>
                             </div>
 
@@ -5790,20 +5778,34 @@ export default function App() {
               {/* Peso Corporal para Calistenia */}
               <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
                 <span className="text-sm font-extrabold text-white">{t.bodyweightSettingTitle}</span>
-                <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 shrink-0">
+                <div className="flex items-center bg-slate-950 border border-slate-800 focus-within:border-emerald-500 rounded-xl px-2.5 py-1.5 shrink-0 transition-colors">
                   <input
-                    type="number"
-                    min="20"
-                    max="250"
-                    step="0.5"
-                    value={settings.userBodyweight ?? 75}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        userBodyweight: Math.max(20, Math.min(250, parseFloat(e.target.value) || 75)),
-                      })
-                    }
-                    className="w-14 text-center bg-transparent text-xs sm:text-sm font-black font-mono-numbers text-emerald-400 focus:outline-none"
+                    type="text"
+                    inputMode="decimal"
+                    data-bodyweight-input="true"
+                    value={bodyweightInput}
+                    placeholder="75"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(',', '.');
+                      if (raw !== '' && !/^\d*(\.\d*)?$/.test(raw)) return;
+                      setBodyweightInput(raw);
+                      const parsed = parseFloat(raw);
+                      if (!Number.isNaN(parsed) && parsed >= 20 && parsed <= 250) {
+                        setSettings((prev) => ({ ...prev, userBodyweight: parsed }));
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = parseFloat(bodyweightInput);
+                      if (Number.isNaN(parsed) || bodyweightInput.trim() === '') {
+                        const fallback = settings.userBodyweight ?? 75;
+                        setBodyweightInput(String(fallback));
+                        return;
+                      }
+                      const clamped = Math.round(Math.max(20, Math.min(250, parsed)) * 10) / 10;
+                      setSettings((prev) => ({ ...prev, userBodyweight: clamped }));
+                      setBodyweightInput(String(clamped));
+                    }}
+                    className="w-16 text-center bg-transparent text-xs sm:text-sm font-black font-mono-numbers text-emerald-400 focus:outline-none"
                   />
                   <span className="text-[10px] font-bold text-slate-500 uppercase">{settings.unit}</span>
                 </div>
