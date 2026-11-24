@@ -248,6 +248,7 @@ export interface Translations {
   bilboSuggestionBanner: (weight: number, unit: string, prevWeight: number, prevReps: number) => string;
   bilboCycleFinishedAlert: string;
   bilboSingleSetNote: string;
+  addNormalSetBtn: string;
   supersetGroupBtn: string;
   supersetConfirmBtn: (group: string) => string;
   supersetUnlinkBtn: string;
@@ -514,7 +515,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       `⚡ Método Bilbo: Hoy toca ${weight} ${unit} (+2.5 ${unit} respecto a ${prevWeight} ${unit} × ${prevReps} reps)`,
     bilboCycleFinishedAlert:
       '🎉 ¡Ciclo Bilbo Finalizado! Se sugiere semana de descarga e iniciar un nuevo ciclo con peso base',
-    bilboSingleSetNote: '1 serie principal explosiva (Modo Bilbo)',
+    bilboSingleSetNote: '1 serie Bilbo explosiva (+ series normales opcionales)',
+    addNormalSetBtn: 'Añadir Serie Normal',
     supersetGroupBtn: '🔗 Agrupar en Superserie',
     supersetConfirmBtn: (group) => `Vincular Superserie ${group}`,
     supersetUnlinkBtn: 'Desvincular',
@@ -780,7 +782,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       `⚡ Bilbo Method: Target ${weight} ${unit} today (+2.5 ${unit} from ${prevWeight} ${unit} × ${prevReps} reps)`,
     bilboCycleFinishedAlert:
       '🎉 Bilbo Cycle Complete! A deload week is suggested before starting a new cycle at base weight',
-    bilboSingleSetNote: '1 main explosive working set (Bilbo Mode)',
+    bilboSingleSetNote: '1 explosive Bilbo set (+ optional normal sets)',
+    addNormalSetBtn: 'Add Normal Set',
     supersetGroupBtn: '🔗 Group in Superset',
     supersetConfirmBtn: (group) => `Link Superset ${group}`,
     supersetUnlinkBtn: 'Unlink',

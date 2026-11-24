@@ -2296,8 +2296,11 @@ export default function App() {
         completedAt: existingWork?.completedAt,
         bodyweightKg: existingWork?.bodyweightKg,
       };
+      const completedExtraSets = target.sets.filter(
+        (s) => s.type !== 'W' && s.id !== existingWork?.id && s.completed
+      );
       target.isBilbo = true;
-      target.sets = [...warmups, mainBilboSet];
+      target.sets = [...warmups, mainBilboSet, ...completedExtraSets];
     } else {
       target.isBilbo = false;
       target.sets = target.sets.map((s) => (s.type === 'B' ? { ...s, type: 'N' as SetType } : s));
@@ -2473,17 +2476,34 @@ export default function App() {
     });
   };
 
-  // Añadir nueva serie a un ejercicio
+  // Añadir nueva serie a un ejercicio (si viene tras una serie Bilbo o calentamiento, crea serie Normal 'N')
   const handleAddSet = (exIndex: number) => {
     if (!activeWorkout) return;
     const updatedExercises = [...activeWorkout.exercises];
     const targetEx = { ...updatedExercises[exIndex] };
     const lastSet = targetEx.sets[targetEx.sets.length - 1];
+    const isAfterBilboOrWarmup = lastSet?.type === 'B' || lastSet?.type === 'W';
+
+    let nextWeight = lastSet ? lastSet.weight : 20;
+    let nextReps = lastSet ? lastSet.reps : 10;
+
+    if (lastSet?.type === 'B') {
+      const prevNormalSets = getPreviousExerciseSets(targetEx.exerciseId).filter(
+        (s) => s.type !== 'B' && s.type !== 'W'
+      );
+      if (prevNormalSets.length > 0) {
+        nextWeight = prevNormalSets[0].weight;
+        nextReps = prevNormalSets[0].reps || 10;
+      } else {
+        nextReps = lastSet.reps > 0 && lastSet.reps <= 15 ? lastSet.reps : 10;
+      }
+    }
+
     const newSet: WorkoutSet = {
       id: `set-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      type: lastSet ? lastSet.type : 'N',
-      weight: lastSet ? lastSet.weight : 20,
-      reps: lastSet ? lastSet.reps : 10,
+      type: isAfterBilboOrWarmup ? 'N' : (lastSet ? lastSet.type : 'N'),
+      weight: nextWeight,
+      reps: nextReps,
       completed: false,
     };
     targetEx.sets = [...targetEx.sets, newSet];
@@ -4682,8 +4702,14 @@ export default function App() {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            const currentIdx = availableSetTypes.indexOf(set.type);
-                                            const nextType = availableSetTypes[(currentIdx + 1) % availableSetTypes.length];
+                                            const hasOtherBilboSet = workoutEx.sets.some(
+                                              (s, idx) => idx !== setIdx && s.type === 'B'
+                                            );
+                                            const rowTypes = hasOtherBilboSet
+                                              ? availableSetTypes.filter((typeOpt) => typeOpt !== 'B')
+                                              : availableSetTypes;
+                                            const currentIdx = rowTypes.indexOf(set.type);
+                                            const nextType = rowTypes[(currentIdx + 1) % rowTypes.length];
                                             handleUpdateSet(exIdx, setIdx, 'type', nextType);
                                           }}
                                           className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition active:scale-90 ${
@@ -4811,23 +4837,21 @@ export default function App() {
                                 })}
                               </div>
 
-                              {/* Botones de acción al pie del ejercicio: Añadir Serie (u oculto en Bilbo), Confirmar Fin y Plegar */}
+                              {/* Botones de acción al pie del ejercicio: Añadir Serie (o Serie Normal tras Bilbo), Confirmar Fin y Plegar */}
                               <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  {isBilboActive ? (
-                                    <span className="text-[11px] font-bold text-amber-300 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                                      {t.bilboSingleSetNote}
-                                    </span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAddSet(exIdx)}
-                                      className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 active:scale-95 transition"
-                                    >
-                                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                      <span>{t.addSetBtn}</span>
-                                    </button>
-                                  )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddSet(exIdx)}
+                                    className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg active:scale-95 transition ${
+                                      isBilboActive && completedBilboSet
+                                        ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                                        : 'text-slate-300 hover:text-emerald-400 hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    <Plus className={`w-3.5 h-3.5 ${isBilboActive && completedBilboSet ? 'text-amber-400' : 'text-emerald-400'}`} />
+                                    <span>{isBilboActive ? t.addNormalSetBtn : t.addSetBtn}</span>
+                                  </button>
 
                                   <button
                                     type="button"
